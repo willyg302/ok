@@ -1,3 +1,3 @@
-import sys
+import strap
 
-print sys.argv
+strap.main()
