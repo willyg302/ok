@@ -59,12 +59,26 @@ def check_env():
 		print('Creating virtual environment at {}...'.format(os.path.basename(ENV)))
 		call('virtualenv {}'.format(ENV), shell=True)
 
-# Install all necessary requirements to the virtual environment
+# Install all necessary requirements
 def install_requirements(requirements):
 	print('== 3. Installing requirements ==')
 	for requirement in requirements:
-		call_virtual(requirement)
+		if ENV:
+			call_virtual(requirement)
+		else:
+			call(requirement, shell=True)
 
+def handle_task(task):
+	task_root = task['root'] if 'root' in task else '.'
+	global ENV
+	ENV = task['virtualenv'] if 'virtualenv' in task else None
+	if not os.path.isdir(task_root):
+		raise Exception('"{}" is not a valid directory!'.format(task_root))
+	with directory(task_root):
+		check_env()
+		install_requirements(task['requirements'])
+		if 'freeze' in task:
+			call_virtual('pip freeze > {}'.format(task['freeze']))
 
 def install(root):
 	if not os.path.isdir(root):
@@ -77,16 +91,7 @@ def install(root):
 		print('=== Installing {} ==='.format(config['project']))
 		check_dependencies()
 		for task in config['tasks']:
-			task_root = task['root'] if 'root' in task else '.'
-			global ENV
-			ENV = task['virtualenv'] if 'virtualenv' in task else None
-			if not os.path.isdir(task_root):
-				raise Exception('"{}" is not a valid directory!'.format(task_root))
-			with directory(task_root):
-				check_env()
-				install_requirements(task['requirements'])
-				if 'freeze' in task:
-					call_virtual('pip freeze > {}'.format(task['freeze']))
+			handle_task(task)
 	print('=== {} Installation Complete! ==='.format(config['project']))
 
 
