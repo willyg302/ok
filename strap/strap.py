@@ -45,7 +45,7 @@ def call_virtual(command):
 
 # Check for and installs dependencies
 def check_dependencies():
-	print('== 1. Checking dependencies ==')
+	print('=== Checking dependencies ===')
 	bootstrap_package('setuptools', 'python setup/ez_setup.py')
 	bootstrap_package('pip', 'python setup/get-pip.py')
 	bootstrap_package('virtualenv', 'pip install virtualenv')
@@ -54,14 +54,14 @@ def check_dependencies():
 def check_env():
 	if not ENV:
 		return
-	print('== 2. Checking virtual environment ==')
+	print('== Checking virtual environment ==')
 	if not os.path.isdir(ENV):
 		print('Creating virtual environment at {}...'.format(os.path.basename(ENV)))
 		call('virtualenv {}'.format(ENV), shell=True)
 
 # Install all necessary requirements
 def install_requirements(requirements):
-	print('== 3. Installing requirements ==')
+	print('== Installing requirements ==')
 	for requirement in requirements:
 		if ENV:
 			call_virtual(requirement)
@@ -69,6 +69,7 @@ def install_requirements(requirements):
 			call(requirement, shell=True)
 
 def handle_task(task):
+	print('=== Running task {} ==='.format(task['name'] if 'name' in task else '(unnamed)'))
 	task_root = task['root'] if 'root' in task else '.'
 	global ENV
 	ENV = task['virtualenv'] if 'virtualenv' in task else None
@@ -88,11 +89,11 @@ def install(root):
 			raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
 		with open(STRAP_FILE) as f:
 			config = json.load(f)
-		print('=== Installing {} ==='.format(config['project']))
+		print('===== Installing {} ====='.format(config['project']))
 		check_dependencies()
 		for task in config['tasks']:
 			handle_task(task)
-	print('=== {} Installation Complete! ==='.format(config['project']))
+	print('===== {} Installation Complete! ====='.format(config['project']))
 
 
 def query_yes_no(query, default='yes'):
@@ -120,7 +121,7 @@ def verify_write_directory(dir):
 			raise Exception('Operation aborted by user.')
 		shutil.rmtree(dir)
 
-# Clones a project from a remote URI [source] into [dest]
+# Clones a project from a remote URI [source] to [dest]
 def clone(source, dest):
 	verify_write_directory(dest)
 	github = '(gh|github)\:(?://)?'
@@ -132,16 +133,17 @@ def clone(source, dest):
 # Copies a project from a local directory [source] to [dest]
 def copy(source, dest):
 	verify_write_directory(dest)
+	print('Copying directory "{}" to "{}"...'.format(source, dest))
 	shutil.copytree(source, dest)
 	install(dest)
 
 def done(err):
 	if err:
 		print(err, file=sys.stderr)
-	print('=== Strapping complete! {} ==='.format('There were errors.' if err else 'No error!'))
+	print('===== Strapping complete! {} ====='.format('There were errors.' if err else 'No error!'))
 
 def run(source, dest=None, callback=None):
-	print('=== Fetching project ===')
+	print('===== Fetching project =====')
 	if not callback:
 		callback = done
 	try:
