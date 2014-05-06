@@ -37,7 +37,7 @@ Once a project is fetched, it will be installed according to the rules defined i
     "project": "My Project Name",
     "tasks": [
         {
-            "name": "The optional name of this task"
+            "name": "The optional name of this task",
             "root": "subdirectory-of-project/to-run-task-in",
             "virtualenv": "virtual-environment-name",
             "requirements": [
@@ -47,7 +47,7 @@ Once a project is fetched, it will be installed according to the rules defined i
             "freeze": "requirements.txt"
         },
         {
-            "name": "Oh yeah I can run other stuff too!"
+            "name": "Oh yeah I can run other stuff too!",
             "requirements": ["npm install"]
         }
     ]
