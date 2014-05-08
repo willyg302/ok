@@ -6,13 +6,14 @@ import platform
 import importlib
 import re
 import shutil
-import json
 import contextlib
+import argparse
+import imp
 
 from subprocess import call
 
 
-STRAP_FILE = 'strap.json'
+STRAP_FILE = 'strapme.py'
 ENV = None
 
 script_dir = '\\Scripts\\' if platform.system() == 'Windows' else '/bin/'
@@ -29,6 +30,17 @@ def directory(path):
 		os.chdir(prev_cwd)
 
 
+# Wrapper around call() that handles invoking relative to a virtual environment
+def shell(command, force_global=False):
+	if force_global or not ENV:
+		call(command, shell=True)
+	else:
+		call('{}{}{}'.format(ENV, script_dir, command), shell=True)
+
+def log(level, message):
+	print('[strap] {}> {}'.format('=' * level, message))
+
+
 # Checks to see if [package] is installed, and if not calls [command] to install it
 def bootstrap_package(package, command):
 	print('Checking whether {} is installed...'.format(package))
@@ -36,16 +48,11 @@ def bootstrap_package(package, command):
 		importlib.import_module(package)
 	except ImportError:
 		print('{} not installed, installing now...'.format(package))
-		call(command, shell=True)
-
-# Invokes a shell command relative to our virtual environment
-def call_virtual(command):
-	call('{}{}{}'.format(ENV, script_dir, command), shell=True)
-
+		shell(command, force_global=True)
 
 # Check for and installs dependencies
 def check_dependencies():
-	print('=== Checking dependencies ===')
+	log(3, 'Checking dependencies')
 	bootstrap_package('setuptools', 'python setup/ez_setup.py')
 	bootstrap_package('pip', 'python setup/get-pip.py')
 	bootstrap_package('virtualenv', 'pip install virtualenv')
@@ -54,22 +61,14 @@ def check_dependencies():
 def check_env():
 	if not ENV:
 		return
-	print('== Checking virtual environment ==')
+	log(2, 'Checking virtual environment')
 	if not os.path.isdir(ENV):
 		print('Creating virtual environment at {}...'.format(os.path.basename(ENV)))
-		call('virtualenv {}'.format(ENV), shell=True)
+		shell('virtualenv {}'.format(ENV), force_global=True)
 
-# Install all necessary requirements
-def install_requirements(requirements):
-	print('== Installing requirements ==')
-	for requirement in requirements:
-		if ENV:
-			call_virtual(requirement)
-		else:
-			call(requirement, shell=True)
-
-def handle_task(task):
-	print('=== Running task {} ==='.format(task['name'] if 'name' in task else '(unnamed)'))
+def run_task(tasklist, taskname):
+	task = tasklist[taskname]
+	log(3, 'Running task {}'.format(task['name'] if 'name' in task else taskname))
 	task_root = task['root'] if 'root' in task else '.'
 	global ENV
 	ENV = task['virtualenv'] if 'virtualenv' in task else None
@@ -77,23 +76,32 @@ def handle_task(task):
 		raise Exception('"{}" is not a valid directory!'.format(task_root))
 	with directory(task_root):
 		check_env()
-		install_requirements(task['requirements'])
+		for item in task['run']:
+			if hasattr(item, '__call__'):
+				item()
+			elif isinstance(item, basestring):
+				if item in tasklist:
+					run_task(tasklist, item)
+				else:
+					shell(item)
 		if 'freeze' in task:
-			call_virtual('pip freeze > {}'.format(task['freeze']))
+			shell('pip freeze > {}'.format(task['freeze']))
 
-def install(root):
-	if not os.path.isdir(root):
-		raise Exception('"{}" is not a valid directory!'.format(root))
-	with directory(root):
+def _run(dir, tasks):
+	if not os.path.isdir(dir):
+		raise Exception('"{}" is not a valid directory!'.format(dir))
+	with directory(dir):
 		if not os.path.isfile(STRAP_FILE):
 			raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
-		with open(STRAP_FILE) as f:
-			config = json.load(f)
-		print('===== Installing {} ====='.format(config['project']))
+		config = imp.load_source('strapme', os.path.abspath(STRAP_FILE)).config
+		log(5, 'Running tasks on {}'.format(config['project'] if 'project' in config else os.path.basename(dir)))
 		check_dependencies()
-		for task in config['tasks']:
-			handle_task(task)
-	print('===== {} Installation Complete! ====='.format(config['project']))
+		for task in tasks:
+			if task in config['tasks']:
+				run_task(config['tasks'], task)
+			else:
+				print('"{}" not a valid task, skipping!'.format(task))
+	log(5, 'All tasks complete!')
 
 
 def query_yes_no(query, default='yes'):
@@ -127,33 +135,43 @@ def clone(source, dest):
 	github = '(gh|github)\:(?://)?'
 	url = 'git://github.com/{}.git'.format(re.sub(github, '', source)) if re.search(github, source) else source
 	print('Cloning git repo "{}" to "{}"...'.format(url, dest))
-	call('git clone {} {}'.format(url, dest), shell=True)
-	install(dest)
+	shell('git clone {} {}'.format(url, dest), force_global=True)
+	_run(dest, ['install'])
 
 # Copies a project from a local directory [source] to [dest]
 def copy(source, dest):
 	verify_write_directory(dest)
 	print('Copying directory "{}" to "{}"...'.format(source, dest))
 	shutil.copytree(source, dest)
-	install(dest)
+	_run(dest, ['install'])
+
+def _init(source, dest):
+	log(5, 'Fetching project')
+	if re.search('(?:https?|git(hub)?|gh)(?:://|@)?', source):
+		clone(source, dest if dest else os.getcwd())
+	else:
+		if dest:
+			copy(source, dest)
+		else:
+			_run(source, ['install'])
+
 
 def done(err):
 	if err:
 		print(err, file=sys.stderr)
-	print('===== Strapping complete! {} ====='.format('There were errors.' if err else 'No error!'))
+	log(5, 'Strapping complete! {}'.format('There were errors.' if err else 'No error!'))
 
-def run(source, dest=None, callback=None):
-	print('===== Fetching project =====')
-	if not callback:
-		callback = done
+def run(dir, tasks, callback=done):
 	try:
-		if re.search('(?:https?|git(hub)?|gh)(?:://|@)?', source):
-			clone(source, dest if dest else os.getcwd())
-		else:
-			if dest:
-				copy(source, dest)
-			else:
-				install(source)
+		_run(dir, tasks)
+	except Exception, e:
+		callback(e)
+		return
+	callback(None)
+
+def init(source, dest, callback=done):
+	try:
+		_init(source, dest)
 	except Exception, e:
 		callback(e)
 		return
@@ -161,12 +179,26 @@ def run(source, dest=None, callback=None):
 
 
 def main():
-	if len(sys.argv) < 2:
-		print('Usage: strap <uri-or-path-to-repo> [path-to-output-dir]')
-		return
-	source = sys.argv[1]
-	dest = sys.argv[2] if len(sys.argv) > 2 else ''
-	run(source, dest)
+	parser = argparse.ArgumentParser(prog='strap')
+	subparsers = parser.add_subparsers()
+
+	run_parser = subparsers.add_parser('run')
+	run_parser.add_argument('tasks', nargs='+')
+	run_parser.add_argument('--dir', default=os.getcwd())
+
+	init_parser = subparsers.add_parser('init')
+	init_parser.add_argument('src')
+	init_parser.add_argument('--dest')
+
+	if len(sys.argv) == 1:
+		args = parser.parse_args(['run', 'default'])
+	else:
+		args = parser.parse_args()
+
+	if hasattr(args, 'tasks'):
+		run(args.dir, args.tasks)
+	else:
+		init(args.src, args.dest)
 
 
 if __name__ == '__main__':
