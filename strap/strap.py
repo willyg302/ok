@@ -32,13 +32,19 @@ def directory(path):
 
 # Wrapper around call() that handles invoking relative to a virtual environment
 def shell(command, force_global=False):
-	if force_global or not ENV:
-		call(command, shell=True)
-	else:
-		call('{}{}{}'.format(ENV, script_dir, command), shell=True)
+	try:
+		if force_global or not ENV:
+			call(command, shell=True)
+		else:
+			call('{}{}{}'.format(ENV, script_dir, command), shell=True)
+	except KeyboardInterrupt:
+		pass
 
 def log(level, message):
 	print('[strap] {}> {}'.format('=' * level, message))
+
+def normalize_path(path):
+	return path.replace('/', os.sep)
 
 
 # Checks to see if [package] is installed, and if not calls [command] to install it
@@ -69,9 +75,9 @@ def check_env():
 def run_task(tasklist, taskname):
 	task = tasklist[taskname]
 	log(3, 'Running task {}'.format(task['name'] if 'name' in task else taskname))
-	task_root = task['root'] if 'root' in task else '.'
+	task_root = normalize_path(task['root']) if 'root' in task else '.'
 	global ENV
-	ENV = task['virtualenv'] if 'virtualenv' in task else None
+	ENV = normalize_path(task['virtualenv']) if 'virtualenv' in task else None
 	if not os.path.isdir(task_root):
 		raise Exception('"{}" is not a valid directory!'.format(task_root))
 	with directory(task_root):
