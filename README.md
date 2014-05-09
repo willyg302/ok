@@ -1,4 +1,4 @@
-# strap.py
+![strap.py](https://rawgit.com/willyg302/strap.py/master/strap-logo.svg "There's a snake in mah boot!")
 
 ---
 
