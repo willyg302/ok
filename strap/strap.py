@@ -23,12 +23,15 @@ import shutil
 import contextlib
 import imp
 
-from subprocess import call
+from subprocess import call, STDOUT
 from lib.docopt import docopt
 
 
+__version__ = '0.1.0'
+
 STRAP_FILE = 'strapme.py'
 ENV = None
+VERBOSE = False
 
 script_dir = '\\Scripts\\' if platform.system() == 'Windows' else '/bin/'
 
@@ -48,16 +51,20 @@ def directory(path):
 
 # Wrapper around call() that handles invoking relative to a virtual environment
 def shell(command, force_global=False):
+	if ENV and not force_global:
+		command = '{}{}{}'.format(ENV, script_dir, command)
 	try:
-		if force_global or not ENV:
+		if VERBOSE:
 			call(command, shell=True)
 		else:
-			call('{}{}{}'.format(ENV, script_dir, command), shell=True)
+			with open(os.devnull, 'w') as fnull:
+				call(command, stdout=fnull, stderr=STDOUT, shell=True)
 	except KeyboardInterrupt:
 		pass
 
-def log(level, message):
-	print('[strap] {}> {}'.format('=' * level, message))
+def log(level, message, important=True):
+	if VERBOSE or important:
+		print('{}[strap] => {}'.format(' ' * level, message))
 
 def normalize_path(path):
 	return path.replace('/', os.sep)
@@ -65,16 +72,16 @@ def normalize_path(path):
 
 # Checks to see if [package] is installed, and if not calls [command] to install it
 def bootstrap_package(package, command):
-	print('Checking whether {} is installed...'.format(package))
+	log(2, 'Checking whether {} is installed...'.format(package), important=False)
 	try:
 		importlib.import_module(package)
 	except ImportError:
-		print('{} not installed, installing now...'.format(package))
+		log(2, '{} not installed, installing now...'.format(package))
 		shell(command, force_global=True)
 
 # Check for and installs dependencies
 def check_dependencies():
-	log(3, 'Checking dependencies')
+	log(2, 'Checking dependencies')
 	with directory(os.path.dirname(os.path.abspath(__file__))):  # This has to be done relative to strap.py
 		bootstrap_package('setuptools', 'python lib/ez_setup.py')
 		bootstrap_package('pip', 'python lib/get-pip.py')
@@ -84,14 +91,14 @@ def check_dependencies():
 def check_env():
 	if not ENV:
 		return
-	log(2, 'Checking virtual environment')
+	log(4, 'Checking virtual environment')
 	if not os.path.isdir(ENV):
-		print('Creating virtual environment at {}...'.format(os.path.basename(ENV)))
+		log(4, 'Creating virtual environment at {}...'.format(os.path.basename(ENV)))
 		shell('virtualenv {}'.format(ENV), force_global=True)
 
 def run_task(tasklist, taskname):
 	task = tasklist[taskname]
-	log(3, 'Running task {}'.format(task['name'] if 'name' in task else taskname))
+	log(2, 'Running task {}'.format(task['name'] if 'name' in task else taskname))
 	task_root = normalize_path(task['root']) if 'root' in task else '.'
 	global ENV
 	ENV = normalize_path(task['virtualenv']) if 'virtualenv' in task else None
@@ -113,14 +120,14 @@ def _run(dir, tasks):
 		if not os.path.isfile(STRAP_FILE):
 			raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
 		config = imp.load_source('strapme', os.path.abspath(STRAP_FILE)).config
-		log(5, 'Running tasks on {}'.format(config['project'] if 'project' in config else os.path.basename(dir)))
+		log(0, 'Running tasks on {}'.format(config['project'] if 'project' in config else os.path.basename(dir)))
 		check_dependencies()
 		for task in tasks:
 			if task in config['tasks']:
 				run_task(config['tasks'], task)
 			else:
-				print('"{}" not a valid task, skipping!'.format(task))
-	log(5, 'All tasks complete!')
+				log(2, '"{}" not a valid task, skipping!'.format(task))
+	log(0, 'All tasks complete!')
 
 
 def query_yes_no(query, default='yes'):
@@ -153,19 +160,19 @@ def clone(source, dest):
 	verify_write_directory(dest)
 	github = '(gh|github)\:(?://)?'
 	url = 'git://github.com/{}.git'.format(re.sub(github, '', source)) if re.search(github, source) else source
-	print('Cloning git repo "{}" to "{}"...'.format(url, dest))
+	log(2, 'Cloning git repo "{}" to "{}"...'.format(url, dest))
 	shell('git clone {} {}'.format(url, dest), force_global=True)
 	_run(dest, ['install'])
 
 # Copies a project from a local directory [source] to [dest]
 def copy(source, dest):
 	verify_write_directory(dest)
-	print('Copying directory "{}" to "{}"...'.format(source, dest))
+	log(2, 'Copying directory "{}" to "{}"...'.format(source, dest))
 	shutil.copytree(source, dest)
 	_run(dest, ['install'])
 
 def _init(source, dest):
-	log(5, 'Fetching project')
+	log(0, 'Fetching project')
 	if re.search('(?:https?|git(hub)?|gh)(?:://|@)?', source):
 		clone(source, dest if dest else os.getcwd())
 	elif dest:
@@ -177,9 +184,19 @@ def _init(source, dest):
 def done(err):
 	if err:
 		print(err, file=sys.stderr)
-	log(5, 'Strapping complete! {}'.format('There were errors.' if err else 'No error!'))
+	log(0, 'Strapping complete! {}'.format('There were errors.' if err else 'No error!'))
 
-def run(dir, tasks, callback=done):
+def funwrap(fun, args, verbose, callback):
+	try:
+		global VERBOSE
+		VERBOSE = verbose
+		fun(**args)
+	except Exception, e:
+		callback(e)
+		return
+	callback(None)
+
+def run(dir, tasks, verbose=False, callback=done):
 	'''usage: strap run -h
        strap run [-v] [--dir=PATH] <task>...
 
@@ -188,14 +205,9 @@ options:
   -v, --verbose
   -d PATH --dir PATH
   '''
-	try:
-		_run(dir, tasks)
-	except Exception, e:
-		callback(e)
-		return
-	callback(None)
+	funwrap(_run, {'dir': dir, 'tasks': tasks}, verbose, callback)
 
-def init(source, dest, callback=done):
+def init(source, dest, verbose=False, callback=done):
 	'''usage: strap init -h
        strap init [-v] [--dest=PATH] <source>
 
@@ -204,33 +216,29 @@ options:
   -v, --verbose
   -d PATH --dest PATH
   '''
-	try:
-		_init(source, dest)
-	except Exception, e:
-		callback(e)
-		return
-	callback(None)
+	funwrap(_init, {'source': source, 'dest': dest}, verbose, callback)
 
 
 def main():
-	args = docopt(__doc__, version='strap version 0.1.0', options_first=True)
-	command = args['<command>']
-	argv = [command] + args['<args>']
+	parsed = docopt(__doc__, version='strap version {}'.format(__version__), options_first=True)
+	command = parsed['<command>']
+	args = parsed['<args>']
+	argv = [command] + args
 	if not command:
 		command = 'run'
 		argv = ['run', 'default']
 
 	if command == 'help':
-		if args['<args>'] and args['<args>'][0] in 'init run'.split():
-			print(docopt(globals()[args['<args>'][0]].__doc__, argv=['-h']))
+		if args and args[0] in 'init run'.split():
+			print(docopt(globals()[args[0]].__doc__, argv=['-h']))
 		else:
 			print(__doc__.strip('\n'))
 	elif command == 'init':
 		subargs = docopt(init.__doc__, argv=argv)
-		init(subargs['<source>'], subargs['--dest'])
+		init(subargs['<source>'], subargs['--dest'], verbose=subargs['--verbose'])
 	elif command == 'run':
 		subargs = docopt(run.__doc__, argv=argv)
-		run(subargs['--dir'] or os.getcwd(), subargs['<task>'])
+		run(subargs['--dir'] or os.getcwd(), subargs['<task>'], verbose=subargs['--verbose'])
 	else:
 		print('Invalid command "{}". See "strap help".'.format(command))
 
