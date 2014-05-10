@@ -10,33 +10,43 @@ Clone this repo and put the `strap/` directory somewhere convenient (for this re
 
 ## Usage
 
+```bash
+strap
+strap (--version)
+strap <command> [<args>...]
+```
+
+Where `command` is one of `init` or `run`. Calling `strap` without any arguments is equivalent to `strap run default`.
+
+> **Note**: All subcommands allow the `--verbose` flag, which is false by default to suppress the console spam that many installations generate. If you'd like to see all output, add this flag.
+
 ### init
 
-`strap init <source> [--dest destination]`
+`strap init [-v, --verbose] [-d, --dest=PATH] <source>`
 
-`source` can either be a directory or a GitHub repo URI. `destination` is an optional directory. If `destination` is given, then `source` will be cloned or copied into it. If `destination` is omitted, then `source` will either be cloned into the current working directory (if it is a URI) or "refreshed" (if it is a directory, the equivalent of `strap run install`).
+`source` can either be a directory or a GitHub repo URI. `dest` is an optional directory. If `dest` is given, then `source` will be cloned or copied into it. If `dest` is omitted, then `source` will either be cloned into the current working directory (if it is a URI) or "refreshed" (if it is a directory, the equivalent of `strap run install`).
 
 **Examples**:
 
 ```bash
 strap init ../somedir/otherdir/strap-this
 strap init copy/this --dest ../to/here/and-then-strap-it
-strap init https://github.com/willyg302/Parrot
+strap init -v https://github.com/willyg302/Parrot
 strap init gh:willyg302/jarvis
-strap init git@github.com:willyg302/jarvis.git --dest ~/jarvis-test
+strap init git@github.com:willyg302/jarvis.git -d ~/jarvis-test
 ```
 
 ### run
 
-`strap run <task>... [--dir directory]`
+`strap run [-v, --verbose] [-d, --dir=PATH] <task>...`
 
-You can provide a list of one or more `task` to run. If given, `directory` specifies the path to execute tasks from; it defaults to the current working directory. Note that calling `strap` (no arguments) is equivalent to `strap run default`.
+You can provide a list of one or more `task` to run. If given, `dir` specifies the path to execute tasks from; it defaults to the current working directory. Note that calling `strap` (no arguments) is equivalent to `strap run default` (but does not allow the `--verbose` flag).
 
 **Examples**:
 
 ```bash
 strap
-strap run sometask
+strap run sometask --verbose
 strap run task_a task_b also_do_this --dir from/this/directory
 ```
 
