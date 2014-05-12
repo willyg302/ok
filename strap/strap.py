@@ -1,17 +1,3 @@
-'''
-usage: strap
-       strap (--version)
-       strap <command> [<args>...]
-
-options:
-  -h, --help
-
-Subcommands include:
-  init  Initialize a project
-  run   Run tasks on a project
-
-See 'strap help <command>' for more information on a specific command.
-  '''
 from __future__ import print_function
 
 import os
@@ -23,8 +9,9 @@ import shutil
 import contextlib
 import imp
 
+import click
+
 from subprocess import call, STDOUT
-from lib.docopt import docopt
 
 
 __version__ = '0.1.0'
@@ -196,51 +183,33 @@ def funwrap(fun, args, verbose, callback):
 		return
 	callback(None)
 
-def run(dir, tasks, verbose=False, callback=done):
-	'''usage: strap run -h
-       strap run [-v] [--dir=PATH] <task>...
 
-options:
-  -h, --help
-  -v, --verbose
-  -d PATH --dir PATH
-  '''
-	funwrap(_run, {'dir': dir, 'tasks': tasks}, verbose, callback)
+def print_version(ctx, value):
+	if not value:
+		return
+	click.echo('strap version {}'.format(__version__))
+	ctx.exit()
 
-def init(source, dest, verbose=False, callback=done):
-	'''usage: strap init -h
-       strap init [-v] [--dest=PATH] <source>
+@click.group(invoke_without_command=True)
+@click.pass_context
+@click.option('--version', is_flag=True, callback=print_version, expose_value=False, is_eager=True)
+def main(ctx):
+	if not ctx.invoked_subcommand:
+		ctx.invoke(run, tasks=(u'default',), dir=os.getcwd(), verbose=False)
 
-options:
-  -h, --help
-  -v, --verbose
-  -d PATH --dest PATH
-  '''
+@main.command()
+@click.argument('source')
+@click.option('--dest', '-d')
+@click.option('--verbose', '-v', is_flag=True)
+def init(source, dest, verbose, callback=done):
 	funwrap(_init, {'source': source, 'dest': dest}, verbose, callback)
 
-
-def main():
-	parsed = docopt(__doc__, version='strap version {}'.format(__version__), options_first=True)
-	command = parsed['<command>']
-	args = parsed['<args>']
-	argv = [command] + args
-	if not command:
-		command = 'run'
-		argv = ['run', 'default']
-
-	if command == 'help':
-		if args and args[0] in 'init run'.split():
-			print(docopt(globals()[args[0]].__doc__, argv=['-h']))
-		else:
-			print(__doc__.strip('\n'))
-	elif command == 'init':
-		subargs = docopt(init.__doc__, argv=argv)
-		init(subargs['<source>'], subargs['--dest'], verbose=subargs['--verbose'])
-	elif command == 'run':
-		subargs = docopt(run.__doc__, argv=argv)
-		run(subargs['--dir'] or os.getcwd(), subargs['<task>'], verbose=subargs['--verbose'])
-	else:
-		print('Invalid command "{}". See "strap help".'.format(command))
+@main.command()
+@click.argument('tasks', nargs=-1)
+@click.option('--dir', '-d', default=os.getcwd())
+@click.option('--verbose', '-v', is_flag=True)
+def run(tasks, dir, verbose, callback=done):
+	funwrap(_run, {'dir': dir, 'tasks': list(tasks)}, verbose, callback)
 
 
 if __name__ == '__main__':
