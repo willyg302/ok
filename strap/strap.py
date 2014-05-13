@@ -59,11 +59,11 @@ def normalize_path(path):
 
 # Checks to see if [package] is installed, and if not calls [command] to install it
 def bootstrap_package(package, command):
-	log(2, 'Checking whether {} is installed...'.format(package), important=False)
+	log(4, 'Checking whether {} is installed...'.format(package), important=False)
 	try:
 		importlib.import_module(package)
 	except ImportError:
-		log(2, '{} not installed, installing now...'.format(package))
+		log(4, '{} not installed, installing now...'.format(package))
 		shell(command, force_global=True)
 
 # Check for and installs dependencies
