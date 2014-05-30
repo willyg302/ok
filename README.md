@@ -20,6 +20,8 @@ Where `command` is one of `init` or `run`. Calling `strap` without any arguments
 
 > **Note**: All subcommands allow the `--verbose` flag, which is false by default to suppress the console spam that many installations generate. If you'd like to see all output, add this flag.
 
+> **Note**: It may be necessary to `sudo` to elevate privileges, as strap.py installs necessary tools globally if they are not present. If you are using strap.py via an alias, don't forget to add `alias sudo='sudo '` to your shell's profile.
+
 ### init
 
 `strap init [-v, --verbose] [-d, --dest=PATH] <source>`
