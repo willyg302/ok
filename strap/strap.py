@@ -9,12 +9,13 @@ import shutil
 import contextlib
 import imp
 
+from subprocess import call, STDOUT
+from collections import namedtuple
+
 import click
 
-from subprocess import call, STDOUT
 
-
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 
 STRAP_FILE = 'strapme.py'
 ENV = None
@@ -83,37 +84,58 @@ def check_env():
 		log(4, 'Creating virtual environment at {}...'.format(os.path.basename(ENV)))
 		shell('virtualenv {}'.format(ENV), force_global=True)
 
-def run_task(tasklist, taskname):
-	task = tasklist[taskname]
-	log(2, 'Running task {}'.format(task['name'] if 'name' in task else taskname))
-	task_root = normalize_path(task['root']) if 'root' in task else '.'
+
+@contextlib.contextmanager
+def root(path):
+	with directory(normalize_path(path)):
+		yield
+
+@contextlib.contextmanager
+def virtualenv(path):
 	global ENV
-	ENV = normalize_path(task['virtualenv']) if 'virtualenv' in task else None
-	with directory(task_root):
+	try:
+		ENV = normalize_path(path)
 		check_env()
-		for item in task['run']:
-			if hasattr(item, '__call__'):
-				item()
-			elif isinstance(item, basestring):
-				if item in tasklist:
-					run_task(tasklist, item)
-				else:
-					shell(item)
-		if 'freeze' in task:
-			shell('pip freeze > {}'.format(task['freeze']))
+		yield
+	finally:
+		ENV = None
+
+def freeze(filename):
+	shell('pip freeze > {}'.format(filename))
+
+def run_task(task):
+	if isinstance(task, (list, tuple)):
+		for t in task:
+			run_task(t)
+	else:
+		if hasattr(task, '__call__'):
+			log(2, 'Running task {}'.format(task.__doc__ if task.__doc__ else task.__name__))
+			task()
+		else:
+			shell(task)
+
+api = namedtuple('API', 'root virtualenv shell freeze run')(
+	root=root,
+	virtualenv=virtualenv,
+	shell=shell,
+	freeze=freeze,
+	run=run_task
+)
+
 
 def _run(dir, tasks):
 	with directory(dir):
 		if not os.path.isfile(STRAP_FILE):
 			raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
-		config = imp.load_source('strapme', os.path.abspath(STRAP_FILE)).config
-		log(0, 'Running tasks on {}'.format(config['project'] if 'project' in config else os.path.basename(dir)))
+		config = imp.load_source('strapme', os.path.abspath(STRAP_FILE))
+		log(0, 'Running tasks on {}'.format(config.project if hasattr(config, 'project') else os.path.basename(dir)))
 		check_dependencies()
+		setattr(config, 'strap', api)
 		for task in tasks:
-			if task in config['tasks']:
-				run_task(config['tasks'], task)
-			else:
+			if not hasattr(config, task):
 				log(2, '"{}" not a valid task, skipping!'.format(task))
+				continue
+			run_task(getattr(config, task))
 	log(0, 'All tasks complete!')
 
 
