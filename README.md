@@ -59,48 +59,57 @@ Once a project is fetched with `strap init`, it will be installed according to t
 ```python
 import os
 
+project = 'My Optional Project Name'
+
 def print_cwd():
     print('Hello from {}!'.format(os.getcwd()))
 
-config = {
-    'project': 'My Optional Project Name',
-    'tasks': {
-        'task_name': {
-            'name': 'The optional name of this task',
-            'root': 'subdirectory-of-project/to-run-task-in',
-            'virtualenv': 'virtual-environment-name',
-            'run': [
+def task_name():
+    '''The optional name of this task'''
+    with strap.root('subdirectory-of-project/to-run-task-in'):
+        with strap.virtualenv('virtual-environment-name'):
+            strap.run([
                 'pip install some-module',
                 'easy_install this-other-module'
-            ],
-            'freeze': 'requirements.txt'
-        },
-        'shell': {
-            'run': [
-                'echo Oh yeah I can run other stuff too!',
-                'npm install'
-            ]
-        },
-        'python': {
-            'name': 'Call a Python function? No problem.',
-            'root': '../lets-do-it-here',
-            'run': [print_cwd]
-        },
-        'install': {
-            'run': ['task_name', 'shell', 'python']
-        },
-        'default': {
-            'run': ['install']
-        }
-    }
-}
+            ])
+            strap.freeze('requirements.txt')
+
+def shell():
+    strap.run([
+        'echo Oh yeah I can run other stuff too!',
+        'npm install'
+    ])
+
+def python():
+    '''Call a Python function? No problem.'''
+    with strap.root('../lets-do-it-here'):
+        print_cwd()  # Or strap.run(print_cwd)
+
+def install():
+    strap.run([task_name, shell, python])
+
+def default():
+    strap.run(install)
 ```
 
-`strapme.py` must contain a Python dictionary called `config`. This dict defines project metadata and holds a dictionary of `tasks` that may be run. The "install" and "default" tasks are required; without them, you'll probably get errors.
+Essentially, each function defined in `strapme.py` is a task. The "install" and "default" tasks are required; without them, you'll probably get errors. Note that you can do anything in `strapme.py` that you would normally do in a Python script, including importing needed modules, but it is best to stick with standard or globally-installed modules.
 
-Tasks are run sequentially and fully separate from each other. With the exception of the `run` array, all task properties are optional. If a `virtualenv` is given, then subtasks defined in `run` will be executed relative to the virtual environment. You may also specify a `root` directory to execute all tasks in (this includes building the virtual environment).
+#### Metadata
 
-`run` may contain the name of another task defined in `tasks`, a shell command, or the name of a Python function defined globally in `strapme.py`. Note that while this system allows imports, it is best to stick with standard or globally-installed modules.
+- Define a global variable `project` to give your project a name
+- Name a task using its function docstring
+
+#### API
+
+strap.py exposes the `strap` variable for use in tasks. This variable has the following functions:
+
+Function       | Description
+-------------- | -----------
+`root()`       | Pass a path to a directory to carry out the task in. Use with the `with` statement.
+`virtualenv()` | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
+`shell()`      | Executes a shell command given as a string.
+`freeze()`     | Pass the name of a file to `pip freeze` into. Only really useful with a virtual environment.
+`run()`        | Either a single subtask or a list of subtasks to run. Each subtask may either be a Python function or a string that will be interpreted as a shell command.
 
 ### From Code
 
