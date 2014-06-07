@@ -89,14 +89,14 @@ class Result(object):
 
 
 class CliRunner(object):
-    """The CLI runner provides functionality to invoke a Click command line
+    """The CLI runner provides functionality to invoke a click command line
     script for unittesting purposes in a isolated environment.  This only
-    works in single-threaded systems without any concurrency as it changes
+    works in single-threaded systems without any concurrency as it changes the
     global interpreter state.
 
     :param charset: the character set for the input and output data.  This is
-                    utf-8 by default and should not be changed currently as
-                    the reporting to click only works on Python 2 properly.
+                    UTF-8 by default and should not be changed currently as
+                    the reporting to click only works in Python 2 properly.
     :param env: a dictionary with environment variables for overriding.
     :param echo_stdin: if this is set to `True`, then reading from stdin writes
                        to stdout.  This is useful for showing examples in
@@ -127,10 +127,10 @@ class CliRunner(object):
 
     @contextlib.contextmanager
     def isolation(self, input=None, env=None):
-        """A context manager that set up the isolation for invoking of a
-        command line tool.  This sets up stdin with the given input data,
+        """A context manager that sets up the isolation for invoking of a
+        command line tool.  This sets up stdin with the given input data
         and `os.environ` with the overrides from the given dictionary.
-        This also rebinds some internals in Click to be mocked (like the
+        This also rebinds some internals in click to be mocked (like the
         prompt functionality).
 
         This is automatically done in the :meth:`invoke` method.
@@ -172,10 +172,19 @@ class CliRunner(object):
             sys.stdout.flush()
             return input.readline().rstrip('\r\n')
 
+        def _getchar(echo):
+            char = sys.stdin.read(1)
+            if echo:
+                sys.stdout.write(char)
+                sys.stdout.flush()
+            return char
+
         old_visible_prompt_func = click.termui.visible_prompt_func
         old_hidden_prompt_func = click.termui.hidden_prompt_func
+        old__getchar_func = click.termui._getchar
         click.termui.visible_prompt_func = visible_input
         click.termui.hidden_prompt_func = hidden_input
+        click.termui._getchar = _getchar
 
         old_env = {}
         try:
@@ -203,6 +212,7 @@ class CliRunner(object):
             sys.stdin = old_stdin
             click.termui.visible_prompt_func = old_visible_prompt_func
             click.termui.hidden_prompt_func = old_hidden_prompt_func
+            click.termui._getchar = old__getchar_func
 
     def invoke(self, cli, args=None, input=None, env=None, **extra):
         """Invokes a command in an isolated environment.  The arguments are

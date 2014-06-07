@@ -1,18 +1,70 @@
 import os
 import sys
 import codecs
-from itertools import chain
+from contextlib import contextmanager
+from itertools import chain, repeat
 
 from .types import convert_type, IntRange, BOOL
 from .utils import make_str, make_default_short_help, echo
-from .exceptions import ClickException, UsageError, Abort
+from .exceptions import ClickException, UsageError, BadParameter, Abort
 from .termui import prompt, confirm
-from .formatting import HelpFormatter
+from .formatting import HelpFormatter, join_options
 from .parser import OptionParser, split_opt
 
-from ._compat import PY2, isidentifier
+from ._compat import PY2, isidentifier, iteritems
 
 _missing = object()
+
+
+def _bashcomplete(cmd, prog_name, complete_var=None):
+    """Internal handler for the bash completion support."""
+    if complete_var is None:
+        complete_var = '_%s_COMPLETE' % (prog_name.replace('-', '_')).upper()
+    complete_instr = os.environ.get(complete_var)
+    if not complete_instr:
+        return
+
+    from click._bashcomplete import bashcomplete
+    if bashcomplete(cmd, prog_name, complete_var, complete_instr):
+        sys.exit(1)
+
+
+def batch(iterable, batch_size):
+    return list(zip(*repeat(iter(iterable), batch_size)))
+
+
+def invoke_param_callback(callback, ctx, param, value):
+    code = getattr(callback, '__code__', None)
+    args = getattr(code, 'co_argcount', 3)
+
+    if args < 3:
+        # This will become a warning in click 3.0:
+        ## from warnings import warn
+        ## warn(Warning('Invoked legacy parameter callback "%s".  The new '
+        ##              'signature for such callbacks starting with '
+        ##              'click 2.0 is (ctx, param, value).'
+        ##              % callback), stacklevel=3)
+        return callback(ctx, value)
+    return callback(ctx, param, value)
+
+
+@contextmanager
+def augment_usage_errors(ctx, param=None):
+    """Context manager that attaches extra information to exceptions that
+    fly.
+    """
+    try:
+        yield
+    except BadParameter as e:
+        if e.ctx is None:
+            e.ctx = ctx
+        if param is not None and e.param is None:
+            e.param = param
+        raise
+    except UsageError as e:
+        if e.ctx is None:
+            e.ctx = ctx
+        raise
 
 
 def iter_params_for_processing(invocation_order, declaration_order):
@@ -42,6 +94,10 @@ class Context(object):
     A context can be used as context manager in which case it will call
     :meth:`close` on teardown.
 
+    .. versionadded:: 2.0
+       Added the `resilient_parsing`, `help_option_names`,
+       `token_normalize_func` parameters.
+
     :param command: the command class for this context.
     :param parent: the parent context.
     :param info_name: the info name for this invokation.  Generally this
@@ -61,11 +117,23 @@ class Context(object):
                            inherit from parent context.  If no context
                            defines the terminal width then auto
                            detection will be applied.
+    :param resilient_parsing: if this flag is enabled then click will
+                              parse without any interactivity or callback
+                              invocation.  This is useful for implementing
+                              things such as completion support.
+    :param help_option_names: optionally a list of strings that define how
+                              the default help parameter is named.  The
+                              default is ``['--help']``.
+    :param token_normalize_func: an optional function that is used to
+                                 normalize tokens (options, choices,
+                                 etc.).  This for instance can be used to
+                                 implement case insensitive behavior.
     """
 
     def __init__(self, command, parent=None, info_name=None, obj=None,
                  auto_envvar_prefix=None, default_map=None,
-                 terminal_width=None):
+                 terminal_width=None, resilient_parsing=False,
+                 help_option_names=None, token_normalize_func=None):
         #: the parent context or `None` if none exists.
         self.parent = parent
         #: the :class:`Command` for this context.
@@ -80,20 +148,44 @@ class Context(object):
         #: this flag indicates if a subcommand is going to be executed.
         #: a group callback can use this information to figure out if it's
         #: being executed directly or because the execution flow passes
-        #: onwards to a subcommand.  By default it's `None` but it can be
+        #: onwards to a subcommand.  By default it's `None`, but it can be
         #: the name of the subcommand to execute.
         self.invoked_subcommand = None
         if obj is None and parent is not None:
             obj = parent.obj
         #: the user object stored.
         self.obj = obj
-        #: A dictionary (like object) with defaults for parameters.
+        #: A dictionary (-like object) with defaults for parameters.
+        if default_map is None \
+           and parent is not None \
+           and parent.default_map is not None:
+            default_map = parent.default_map.get(info_name)
         self.default_map = default_map
 
         if terminal_width is None and parent is not None:
             terminal_width = parent.terminal_width
         #: The width of the terminal (None is autodetection).
         self.terminal_width = terminal_width
+
+        if help_option_names is None:
+            if parent is not None:
+                help_option_names = parent.help_option_names
+            else:
+                help_option_names = ['--help']
+
+        #: The names for the help options.
+        self.help_option_names = help_option_names
+
+        if token_normalize_func is None and parent is not None:
+            token_normalize_func = parent.token_normalize_func
+
+        #: An optional normalization function for tokens.  This is
+        #: options, choices, commands etc.
+        self.token_normalize_func = token_normalize_func
+
+        #: Indicates if resilient parsing is enabled.  In that case click
+        #: will do its best to not cause any failures.
+        self.resilient_parsing = resilient_parsing
 
         # If there is no envvar prefix yet, but the parent has one and
         # the command on this level has a name, we can expand the envvar
@@ -123,7 +215,7 @@ class Context(object):
     def call_on_close(self, f):
         """This decorator remembers a function as callback that should be
         executed when the context tears down.  This is most useful to bind
-        resource handling to the script execution.  For instance file objects
+        resource handling to the script execution.  For instance, file objects
         opened by the :class:`File` type will register their close callbacks
         here.
 
@@ -229,7 +321,8 @@ class Context(object):
         args = args[2:]
         if getattr(callback, '__click_pass_context__', False):
             args = (self,) + args
-        return callback(*args, **kwargs)
+        with augment_usage_errors(self):
+            return callback(*args, **kwargs)
 
     def forward(*args, **kwargs):
         """Similar to :meth:`forward` but fills in default keyword
@@ -251,124 +344,42 @@ class Context(object):
         return self.invoke(cmd, **kwargs)
 
 
-class Command(object):
-    """Commands are the basic building block of command line interfaces in
-    click.  A basic command handles command line parsing and might dispatch
-    more parsing to commands nested blow it.
+class BaseCommand(object):
+    """The base command implements the minimal API contract of commands.
+    Most code will never use this as it does not implement a lot of useful
+    functionality but it can act as the direct subclass of alternative
+    parsing methods that do not depend on the click parser.
+
+    For instance, this can be used to bridge click and other systems like
+    argparse or docopt.
+
+    Because base commands do not implement a lot of the API that other
+    parts of click take for granted, they are not supported for all
+    operations.  For instance, they cannot be used with the decorators
+    usually and they have no built-in callback system.
+
+    .. versionchanged:: 2.0
+       Added the `context_settings` parameter.
 
     :param name: the name of the command to use unless a group overrides it.
-    :param callback: the callback to invoke.  This is optional.
-    :param params: the parameters to register with this command.  This can
-                   be either :class:`Option` or :class:`Argument` objects.
-    :param help: the help string to use for this command.
-    :param epilog: like the help string but it's printed at the end of the
-                   help page after everything else.
-    :param short_help: the short help to use for this command.  This is
-                       shown on the command listing of the parent command.
-    :param add_help_option: by default each command registers a ``--help``
-                            option.  This can be disabled by this parameter.
+    :param context_settings: an optional dictionary with defaults that are
+                             passed to the context object.
     """
-    allow_extra_args = False
 
-    def __init__(self, name, callback=None, params=None, help=None,
-                 epilog=None, short_help=None,
-                 options_metavar='[OPTIONS]', add_help_option=True):
-        #: the name the command things it has.  Upon registering a command
+    def __init__(self, name, context_settings=None):
+        #: the name the command thinks it has.  Upon registering a command
         #: on a :class:`Group` the group will default the command name
         #: with this information.  You should instead use the
         #: :class:`Context`\'s :attr:`~Context.info_name` attribute.
         self.name = name
-        #: the callback to execute when the command fires.  This might be
-        #: `None` in which case nothing happens.
-        self.callback = callback
-        #: the list of parameters for this command in the order they
-        #: should show up in the help page and execute.  Eager parameters
-        #: will automatically be handled before non eager ones.
-        self.params = params or []
-        self.help = help
-        self.epilog = epilog
-        self.options_metavar = options_metavar
-        if short_help is None and help:
-            short_help = make_default_short_help(help)
-        self.short_help = short_help
-        if add_help_option:
-            self.add_help_option()
-
-    def add_help_option(self):
-        """Adds a help option to the command."""
-        help_option()(self)
-
-    def make_parser(self, ctx):
-        """Creates the underlying option parser for this command."""
-        parser = OptionParser(ctx)
-        for param in self.params:
-            param.add_to_parser(parser, ctx)
-        return parser
+        #: an optional dictionary with defaults passed to the context.
+        self.context_settings = context_settings
 
     def get_usage(self, ctx):
-        """Formats the usage line into a string and returns it.  This
-        creates a formatter and will call into the following formatting
-        methods:
-
-        -   :meth:`format_usage`
-        """
-        formatter = ctx.make_formatter()
-        self.format_usage(ctx, formatter)
-        return formatter.getvalue().rstrip('\n')
+        raise NotImplementedError('Base commands cannot get usage')
 
     def get_help(self, ctx):
-        """Formats the help into a string and returns it.  This creates a
-        formatter and will call into the following formatting methods:
-
-        -   :meth:`format_usage`
-        -   :meth:`format_help`
-        -   :meth:`format_options`
-        -   :meth:`format_epilog`
-        """
-        formatter = ctx.make_formatter()
-        self.format_usage(ctx, formatter)
-        self.format_help(ctx, formatter)
-        self.format_options(ctx, formatter)
-        self.format_epilog(ctx, formatter)
-        return formatter.getvalue().rstrip('\n')
-
-    def format_usage(self, ctx, formatter):
-        """Writes the usage line into the formatter."""
-        pieces = self.collect_usage_pieces(ctx)
-        formatter.write_usage(ctx.command_path, ' '.join(pieces))
-
-    def format_help(self, ctx, formatter):
-        """Writes the help into the formatter if it exists."""
-        if self.help:
-            formatter.write_paragraph()
-            with formatter.indentation():
-                formatter.write_text(self.help)
-
-    def format_options(self, ctx, formatter):
-        """Writes all the options into the formatter if they exist."""
-        opts = []
-        for param in self.params:
-            rv = param.get_help_record(ctx)
-            if rv is not None:
-                opts.append(rv)
-
-        if opts:
-            with formatter.section('Options'):
-                formatter.write_dl(opts)
-
-    def format_epilog(self, ctx, formatter):
-        """Writes the epilog into the formatter if it exists."""
-        if self.epilog:
-            formatter.write_paragraph()
-            with formatter.indentation():
-                formatter.write_text(self.epilog)
-
-    def collect_usage_pieces(self, ctx):
-        """Returns all the pieces that go into the usage line."""
-        rv = [self.options_metavar]
-        for param in self.params:
-            rv.extend(param.get_usage_pieces(ctx))
-        return rv
+        raise NotImplementedError('Base commands cannot get help')
 
     def make_context(self, info_name, args, parent=None, **extra):
         """This function when given an info name and arguments will kick
@@ -377,7 +388,7 @@ class Command(object):
 
         :param info_name: the info name for this invokation.  Generally this
                           is the most descriptive name for the script or
-                          command.  For the toplevel script is is usually
+                          command.  For the toplevel script it's usually
                           the name of the script, for commands below it it's
                           the name of the script.
         :param args: the arguments to parse as list of strings.
@@ -385,11 +396,9 @@ class Command(object):
         :param extra: extra keyword arguments forwarded to the context
                       constructor.
         """
-        if 'default_map' not in extra:
-            default_map = None
-            if parent is not None and parent.default_map is not None:
-                default_map = parent.default_map.get(info_name)
-            extra['default_map'] = default_map
+        for key, value in iteritems(self.context_settings or {}):
+            if key not in extra:
+                extra[key] = value
         ctx = Context(self, info_name=info_name, parent=parent, **extra)
         self.parse_args(ctx, args)
         return ctx
@@ -399,30 +408,19 @@ class Command(object):
         and parses the arguments, then modifies the context as necessary.
         This is automatically invoked by :meth:`make_context`.
         """
-        parser = self.make_parser(ctx)
-        opts, args, param_order = parser.parse_args(args=args)
-
-        for param in iter_params_for_processing(param_order, self.params):
-            value, args = param.handle_parse_result(ctx, opts, args)
-
-        if args and not self.allow_extra_args:
-            ctx.fail('Got unexpected extra argument%s (%s)'
-                     % (len(args) != 1 and 's' or '',
-                        ' '.join(map(make_str, args))))
-
-        ctx.args = args
+        raise NotImplementedError('Base commands do not know how to parse '
+                                  'arguments.')
 
     def invoke(self, ctx):
-        """Given a context, this invokes the attached callback (if it exists)
-        in the right way.
+        """Given a context, this invokes the command.  The default
+        implementation is raising a not implemented error.
         """
-        if self.callback is not None:
-            ctx.invoke(self.callback, **ctx.params)
+        raise NotImplementedError('Base commands are not invokable by default')
 
-    def main(self, args=None, prog_name=None, **extra):
+    def main(self, args=None, prog_name=None, complete_var=None, **extra):
         """This is the way to invoke a script with all the bells and
-        whistles as command line application.  This will always terminate
-        the application after calling.  If this is not wanted, ``SystemExit``
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
         needs to be caught.
 
         This method is also available by directly calling the instance of
@@ -431,12 +429,16 @@ class Command(object):
         :param args: the arguments that should be used for parsing.  If not
                      provided, ``sys.argv[1:]`` is used.
         :param prog_name: the program name that should be used.  By default
-                          the progam name is constructed by taking the file
+                          the program name is constructed by taking the file
                           name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog name in
+                             uppercase.
         :param extra: extra keyword arguments are forwarded to the context
                       constructor.  See :class:`Context` for more information.
         """
-        # If we are on python 3 we will verify that the environment is
+        # If we are in Python 3, we will verify that the environment is
         # sane at this point of reject further execution to avoid a
         # broken script.
         if not PY2:
@@ -460,6 +462,12 @@ class Command(object):
         if prog_name is None:
             prog_name = make_str(os.path.basename(
                 sys.argv and sys.argv[0] or __file__))
+
+        # Hook for the Bash completion.  This only activates if the Bash
+        # completion is actually enabled, otherwise this is quite a fast
+        # noop.
+        _bashcomplete(self, prog_name, complete_var)
+
         try:
             try:
                 with self.make_context(prog_name, args, **extra) as ctx:
@@ -478,6 +486,171 @@ class Command(object):
     def __call__(self, *args, **kwargs):
         """Alias for :meth:`main`."""
         return self.main(*args, **kwargs)
+
+
+class Command(BaseCommand):
+    """Commands are the basic building block of command line interfaces in
+    click.  A basic command handles command line parsing and might dispatch
+    more parsing to commands nested below it.
+
+    .. versionchanged:: 2.0
+       Added the `context_settings` parameter.
+
+    :param name: the name of the command to use unless a group overrides it.
+    :param context_settings: an optional dictionary with defaults that are
+                             passed to the context object.
+    :param callback: the callback to invoke.  This is optional.
+    :param params: the parameters to register with this command.  This can
+                   be either :class:`Option` or :class:`Argument` objects.
+    :param help: the help string to use for this command.
+    :param epilog: like the help string but it's printed at the end of the
+                   help page after everything else.
+    :param short_help: the short help to use for this command.  This is
+                       shown on the command listing of the parent command.
+    :param add_help_option: by default each command registers a ``--help``
+                            option.  This can be disabled by this parameter.
+    """
+    allow_extra_args = False
+
+    def __init__(self, name, context_settings=None, callback=None,
+                 params=None, help=None, epilog=None, short_help=None,
+                 options_metavar='[OPTIONS]', add_help_option=True):
+        BaseCommand.__init__(self, name, context_settings)
+        #: the callback to execute when the command fires.  This might be
+        #: `None` in which case nothing happens.
+        self.callback = callback
+        #: the list of parameters for this command in the order they
+        #: should show up in the help page and execute.  Eager parameters
+        #: will automatically be handled before non eager ones.
+        self.params = params or []
+        self.help = help
+        self.epilog = epilog
+        self.options_metavar = options_metavar
+        if short_help is None and help:
+            short_help = make_default_short_help(help)
+        self.short_help = short_help
+        self.add_help_option = add_help_option
+
+    def get_usage(self, ctx):
+        formatter = ctx.make_formatter()
+        self.format_usage(ctx, formatter)
+        return formatter.getvalue().rstrip('\n')
+
+    def format_usage(self, ctx, formatter):
+        """Writes the usage line into the formatter."""
+        pieces = self.collect_usage_pieces(ctx)
+        formatter.write_usage(ctx.command_path, ' '.join(pieces))
+
+    def collect_usage_pieces(self, ctx):
+        """Returns all the pieces that go into the usage line and returns
+        it as a list of strings.
+        """
+        rv = [self.options_metavar]
+        for param in self.params:
+            rv.extend(param.get_usage_pieces(ctx))
+        return rv
+
+    def get_help_option_names(self, ctx):
+        """Returns the names for the help option."""
+        all_names = set(ctx.help_option_names)
+        for param in self.params:
+            all_names.difference_update(param.opts)
+            all_names.difference_update(param.secondary_opts)
+        return all_names
+
+    def make_parser(self, ctx):
+        """Creates the underlying option parser for this command."""
+        parser = OptionParser(ctx)
+        for param in self.params:
+            param.add_to_parser(parser, ctx)
+
+        if self.add_help_option:
+            help_options = self.get_help_option_names(ctx)
+            if help_options:
+                parser.add_option(help_options, action='store_const',
+                                  const=True, dest='$help')
+
+        return parser
+
+    def get_help(self, ctx):
+        """Formats the help into a string and returns it.  This creates a
+        formatter and will call into the following formatting methods:
+        """
+        formatter = ctx.make_formatter()
+        self.format_help(ctx, formatter)
+        return formatter.getvalue().rstrip('\n')
+
+    def format_help(self, ctx, formatter):
+        """Writes the help into the formatter if it exists.
+
+        This calls into the following methods:
+
+        -   :meth:`format_usage`
+        -   :meth:`format_help_text`
+        -   :meth:`format_options`
+        -   :meth:`format_epilog`
+        """
+        self.format_usage(ctx, formatter)
+        self.format_help_text(ctx, formatter)
+        self.format_options(ctx, formatter)
+        self.format_epilog(ctx, formatter)
+
+    def format_help_text(self, ctx, formatter):
+        """Writes the help text to the formatter if it exists."""
+        if self.help:
+            formatter.write_paragraph()
+            with formatter.indentation():
+                formatter.write_text(self.help)
+
+    def format_options(self, ctx, formatter):
+        """Writes all the options into the formatter if they exist."""
+        opts = []
+        for param in self.params:
+            rv = param.get_help_record(ctx)
+            if rv is not None:
+                opts.append(rv)
+
+        if self.add_help_option:
+            help_options = self.get_help_option_names(ctx)
+            if help_options:
+                opts.append([join_options(help_options)[0],
+                             'Show this message and exit.'])
+
+        if opts:
+            with formatter.section('Options'):
+                formatter.write_dl(opts)
+
+    def format_epilog(self, ctx, formatter):
+        """Writes the epilog into the formatter if it exists."""
+        if self.epilog:
+            formatter.write_paragraph()
+            with formatter.indentation():
+                formatter.write_text(self.epilog)
+
+    def parse_args(self, ctx, args):
+        parser = self.make_parser(ctx)
+        opts, args, param_order = parser.parse_args(args=args)
+
+        if opts.get('$help') and not ctx.resilient_parsing:
+            echo(ctx.get_help())
+            ctx.exit()
+
+        for param in iter_params_for_processing(param_order, self.params):
+            value, args = param.handle_parse_result(ctx, opts, args)
+
+        if args and not self.allow_extra_args and not ctx.resilient_parsing:
+            ctx.fail('Got unexpected extra argument%s (%s)'
+                     % (len(args) != 1 and 's' or '',
+                        ' '.join(map(make_str, args))))
+
+        ctx.args = args
+
+    def invoke(self, ctx):
+        """Given a context, this invokes the attached callback (if it exists)
+        in the right way.
+        """
+        if self.callback is not None:
+            ctx.invoke(self.callback, **ctx.params)
 
 
 class MultiCommand(Command):
@@ -542,7 +715,7 @@ class MultiCommand(Command):
                 formatter.write_dl(rows)
 
     def parse_args(self, ctx, args):
-        if not args and self.no_args_is_help:
+        if not args and self.no_args_is_help and not ctx.resilient_parsing:
             echo(ctx.get_help())
             ctx.exit()
         return Command.parse_args(self, ctx, args)
@@ -554,10 +727,19 @@ class MultiCommand(Command):
             ctx.fail('Missing command.')
 
         cmd_name = make_str(ctx.args[0])
+        original_cmd_name = cmd_name
+
+        # Get the command
         cmd = self.get_command(ctx, cmd_name)
 
+        # If we can't find the command but there is a normalization
+        # function available, we try with that one.
+        if cmd is None and ctx.token_normalize_func is not None:
+            cmd_name = ctx.token_normalize_func(cmd_name)
+            cmd = self.get_command(ctx, cmd_name)
+
         # If we don't find the command we want to show an error message
-        # to the user that it was not provided.  However there is
+        # to the user that it was not provided.  However, there is
         # something else we should do: if the first argument looks like
         # an option we want to kick off parsing again for arguments to
         # resolve things like --help which now should go to the main
@@ -565,7 +747,7 @@ class MultiCommand(Command):
         if cmd is None:
             if split_opt(cmd_name)[0]:
                 self.parse_args(ctx, ctx.args)
-            ctx.fail('No such command "%s".' % cmd_name)
+            ctx.fail('No such command "%s".' % original_cmd_name)
 
         return self.invoke_subcommand(ctx, cmd, cmd_name, ctx.args[1:])
 
@@ -680,19 +862,26 @@ class Parameter(object):
 
     Some settings are supported by both options and arguments.
 
+    .. versionchanged:: 2.0
+       Changed signature for parameter callback to also be passed the
+       parameter.  In click 2.0, the old callback format will still work,
+       but it will raise a warning to give you change to migrate the
+       code easier.
+
     :param param_decls: the parameter declarations for this option or
                         argument.  This is a list of flags or argument
                         names.
     :param type: the type that should be used.  Either a :class:`ParamType`
-                 or a python type.  The latter is converted into the former
+                 or a Python type.  The later is converted into the former
                  automatically if supported.
     :param required: controls if this is optional or not.
-    :param default: the default value if omitted.  This can also be a callable
+    :param default: the default value if omitted.  This can also be a callable,
                     in which case it's invoked when the default is needed
                     without any arguments.
     :param callback: a callback that should be executed after the parameter
-                     was matched.  This is called as ``fn(ctx, value)`` and
-                     needs to return the value.
+                     was matched.  This is called as ``fn(ctx, param,
+                     value)`` and needs to return the value.  Before click
+                     2.0, the signature was ``(ctx, value)``.
     :param nargs: the number of arguments to match.  If not ``1`` the return
                   value is a tuple instead of single value.
     :param metavar: how the value is represented in the help page.
@@ -711,7 +900,7 @@ class Parameter(object):
                  default=None, callback=None, nargs=1, metavar=None,
                  expose_value=True, is_eager=False, envvar=None):
         self.name, self.opts, self.secondary_opts = \
-            self._parse_decls(param_decls or ())
+            self._parse_decls(param_decls or (), expose_value)
         self.type = convert_type(type, default)
         self.required = required
         self.callback = callback
@@ -782,13 +971,17 @@ class Parameter(object):
         return value
 
     def get_missing_message(self, ctx):
-        return 'Missing %s %s.' % (
+        rv = 'Missing %s %s.' % (
             self.param_type_name,
             ' / '.join('"%s"' % x for x in chain(
                 self.opts, self.secondary_opts)),
         )
+        extra = self.type.get_missing_message(self)
+        if extra:
+            rv += '  ' + extra
+        return rv
 
-    def value_from_envvar(self, ctx):
+    def resolve_envvar_value(self, ctx):
         if self.envvar is None:
             return
         if isinstance(self.envvar, (tuple, list)):
@@ -799,11 +992,29 @@ class Parameter(object):
         else:
             return os.environ.get(self.envvar)
 
+    def value_from_envvar(self, ctx):
+        rv = self.resolve_envvar_value(ctx)
+        if rv is not None and self.nargs != 1:
+            rv = self.type.split_envvar_value(rv)
+        return rv
+
     def handle_parse_result(self, ctx, opts, args):
-        value = self.consume_value(ctx, opts)
-        value = self.full_process_value(ctx, value)
-        if self.callback is not None:
-            value = self.callback(ctx, value)
+        with augment_usage_errors(ctx, param=self):
+            value = self.consume_value(ctx, opts)
+            try:
+                value = self.full_process_value(ctx, value)
+            except Exception:
+                if not ctx.resilient_parsing:
+                    raise
+                value = None
+            if self.callback is not None:
+                try:
+                    value = invoke_param_callback(
+                        self.callback, ctx, self, value)
+                except Exception:
+                    if not ctx.resilient_parsing:
+                        raise
+
         if self.expose_value:
             ctx.params[self.name] = value
         return value, args
@@ -816,13 +1027,13 @@ class Parameter(object):
 
 
 class Option(Parameter):
-    """Options are usually optionaly values on the command line and
+    """Options are usually optional values on the command line and
     have some extra features that arguments don't have.
 
     All other parameters are passed onwards to the parameter constructor.
 
     :param show_default: controls if the default value should be shown on the
-                         help page.  Normally defaults are not shown.
+                         help page.  Normally, defaults are not shown.
     :param prompt: if set to `True` or a non empty string then the user will
                    be prompted for input if not set.  If set to `True` the
                    prompt will be the option name capitalized.
@@ -836,11 +1047,11 @@ class Option(Parameter):
     :param flag_value: which value should be used for this flag if it's
                        enabled.  This is set to a boolean automatically if
                        the option string contains a slash to mark two options.
-    :param multiple: if this is set to True then the argument is accepted
-                     multiple times and recorded.  This is similar to nargs
+    :param multiple: if this is set to `True` then the argument is accepted
+                     multiple times and recorded.  This is similar to ``nargs``
                      in how it works but supports arbitrary number of
                      arguments.
-    :param count: this flag makes an option increment an integer
+    :param count: this flag makes an option increment an integer.
     :param allow_from_autoenv: if this is enabled then the value of this
                                parameter will be pulled from an environment
                                variable in case a prefix is defined on the
@@ -917,7 +1128,7 @@ class Option(Parameter):
                     raise TypeError('Options cannot be count and flags at '
                                     'the same time.')
 
-    def _parse_decls(self, decls):
+    def _parse_decls(self, decls, expose_value):
         opts = []
         secondary_opts = []
         name = None
@@ -929,11 +1140,13 @@ class Option(Parameter):
                     raise TypeError('Name defined twice')
                 name = decl
             else:
-                if '/' in decl:
-                    first, second = decl.split('/', 1)
+                split_char = decl[:1] == '/' and ';' or '/'
+                if split_char in decl:
+                    first, second = decl.split(split_char, 1)
+                    first = first.rstrip()
                     possible_names.append(split_opt(first))
                     opts.append(first)
-                    secondary_opts.append(second)
+                    secondary_opts.append(second.lstrip())
                 else:
                     possible_names.append(split_opt(decl))
                     opts.append(decl)
@@ -945,6 +1158,8 @@ class Option(Parameter):
                 name = None
 
         if name is None:
+            if not expose_value:
+                return None, opts, secondary_opts
             raise TypeError('Could not determine name for option')
 
         return name, opts, secondary_opts
@@ -979,15 +1194,12 @@ class Option(Parameter):
             parser.add_option(self.opts, **kwargs)
 
     def get_help_record(self, ctx):
+        any_prefix_is_slash = []
+
         def _write_opts(opts):
-            rv = []
-            for opt in opts:
-                prefix = split_opt(opt)[0]
-                rv.append((len(prefix), opt))
-
-            rv.sort(key=lambda x: x[0])
-
-            rv = ', '.join(x[1] for x in rv)
+            rv, any_slashes = join_options(opts)
+            if any_slashes:
+                any_prefix_is_slash[:] = [True]
             if not self.is_flag:
                 rv += ' ' + self.make_metavar()
             return rv
@@ -1005,7 +1217,7 @@ class Option(Parameter):
         if extra:
             help = '%s[%s]' % (help and help + '  ' or '', '; '.join(extra))
 
-        return (' / '.join(rv), help)
+        return ((any_prefix_is_slash and '; ' or ' / ').join(rv), help)
 
     def get_default(self, ctx):
         # If we're a non boolean flag out default is more complex because
@@ -1038,16 +1250,29 @@ class Option(Parameter):
                       confirmation_prompt=self.confirmation_prompt,
                       value_proc=lambda x: self.process_value(ctx, x))
 
-    def value_from_envvar(self, ctx):
-        rv = Parameter.value_from_envvar(self, ctx)
+    def resolve_envvar_value(self, ctx):
+        rv = Parameter.resolve_envvar_value(self, ctx)
         if rv is not None:
             return rv
-        if self.allow_from_autoenv and ctx.auto_envvar_prefix is not None:
+        if self.allow_from_autoenv and \
+           ctx.auto_envvar_prefix is not None:
             envvar = '%s_%s' % (ctx.auto_envvar_prefix, self.name.upper())
             return os.environ.get(envvar)
 
+    def value_from_envvar(self, ctx):
+        rv = self.resolve_envvar_value(ctx)
+        if rv is None:
+            return None
+        value_depth = (self.nargs != 1) + bool(self.multiple)
+        if value_depth > 0 and rv is not None:
+            rv = self.type.split_envvar_value(rv)
+            if self.multiple and self.nargs != 1:
+                rv = batch(rv, self.nargs)
+        return rv
+
     def full_process_value(self, ctx, value):
-        if value is None and self.prompt is not None:
+        if value is None and self.prompt is not None \
+           and not ctx.resilient_parsing:
             return self.prompt_for_value(ctx)
         return Parameter.full_process_value(self, ctx, value)
 
@@ -1061,7 +1286,12 @@ class Argument(Parameter):
     """
     param_type_name = 'argument'
 
-    def __init__(self, param_decls, required=True, **attrs):
+    def __init__(self, param_decls, required=None, **attrs):
+        if required is None:
+            if attrs.get('default') is not None:
+                required = False
+            else:
+                required = attrs.get('nargs', 1) > 0
         Parameter.__init__(self, param_decls, required=required, **attrs)
 
     def make_metavar(self):
@@ -1074,8 +1304,10 @@ class Argument(Parameter):
             var += '...'
         return var
 
-    def _parse_decls(self, decls):
+    def _parse_decls(self, decls, expose_value):
         if not decls:
+            if not expose_value:
+                return None, [], []
             raise TypeError('Could not determine name for argument')
         if len(decls) == 1:
             name = arg = decls[0]
@@ -1096,4 +1328,4 @@ class Argument(Parameter):
 
 
 # Circular dependency between decorators and core
-from .decorators import command, group, help_option
+from .decorators import command, group

@@ -15,6 +15,7 @@
     generated and optparse in the stdlib uses gettext for no good reason
     and might cause us issues.
 """
+import re
 from .exceptions import UsageError
 from .utils import unpack_args
 
@@ -28,6 +29,31 @@ def split_opt(opt):
     return first, opt[1:]
 
 
+def normalize_opt(opt, ctx):
+    if ctx is None or ctx.token_normalize_func is None:
+        return opt
+    prefix, opt = split_opt(opt)
+    return prefix + ctx.token_normalize_func(opt)
+
+
+def split_arg_string(string):
+    """Given an argument string this attempts to split it into small parts."""
+    rv = []
+    for match in re.finditer(r"('([^'\\]*(?:\\.[^'\\]*)*)'"
+                             r'|"([^"\\]*(?:\\.[^"\\]*)*)"'
+                             r'|\S+)\s*', string, re.S):
+        arg = match.group().strip()
+        if arg[:1] == arg[-1:] and arg[:1] in '"\'':
+            arg = arg[1:-1].encode('ascii', 'backslashreplace') \
+                .decode('unicode-escape')
+        try:
+            arg = type(string)(arg)
+        except UnicodeError:
+            pass
+        rv.append(arg)
+    return rv
+
+
 class Option(object):
 
     def __init__(self, opts, dest, action=None, nargs=1, const=None, obj=None):
@@ -36,12 +62,12 @@ class Option(object):
         self.prefixes = set()
 
         for opt in opts:
-            prefix = split_opt(opt)[0]
+            prefix, value = split_opt(opt)
             if not prefix:
                 raise ValueError('Invalid start character for option (%s)'
                                  % opt)
             self.prefixes.add(prefix[0])
-            if len(prefix) == 1:
+            if len(prefix) == 1 and len(value) == 1:
                 self._short_opts.append(opt)
             else:
                 self._long_opts.append(opt)
@@ -128,7 +154,7 @@ class OptionParser(object):
     def add_option(self, opts, dest, action=None, nargs=1, const=None,
                    obj=None):
         """Adds a new option named `dest` to the parser.  The destination
-        is not inferred unlike with optparse and needs to be explicitly
+        is not inferred (unlike with optparse) and needs to be explicitly
         provided.  Action can be any of ``store``, ``store_const``,
         ``append``, ``appnd_const`` or ``count``.
 
@@ -137,6 +163,7 @@ class OptionParser(object):
         """
         if obj is None:
             obj = dest
+        opts = [normalize_opt(opt, self.ctx) for opt in opts]
         option = Option(opts, dest, action=action, nargs=nargs,
                         const=const, obj=obj)
         self._opt_prefixes.update(option.prefixes)
@@ -163,8 +190,12 @@ class OptionParser(object):
         will be memorized multiple times as well.
         """
         state = ParsingState(args)
-        self._process_args_for_options(state)
-        self._process_args_for_args(state)
+        try:
+            self._process_args_for_options(state)
+            self._process_args_for_args(state)
+        except UsageError:
+            if not self.ctx.resilient_parsing:
+                raise
         return state.opts, state.largs, state.order
 
     def _process_args_for_args(self, state):
@@ -179,24 +210,18 @@ class OptionParser(object):
 
     def _process_args_for_options(self, state):
         while state.rargs:
-            arg = state.rargs[0]
+            arg = state.rargs.pop(0)
             arglen = len(arg)
-            # Double dash es always handled explicitly regardless of what
+            # Double dashes always handled explicitly regardless of what
             # prefixes are valid.
             if arg == '--':
-                del state.rargs[0]
                 return
-            elif arg[:2] in self._opt_prefixes and arglen > 2:
-                # process a single long option (possibly with value(s))
-                self._process_long_opt(state)
             elif arg[:1] in self._opt_prefixes and arglen > 1:
-                # process a cluster of short options (possibly with
-                # value(s) for the last one only)
-                self._process_short_opts(state)
+                self._process_opts(arg, state)
             elif self.allow_interspersed_args:
                 state.largs.append(arg)
-                del state.rargs[0]
             else:
+                state.rargs.insert(0, arg)
                 return
 
         # Say this is the original argument list:
@@ -241,11 +266,8 @@ class OptionParser(object):
             self._error('no such option: %s.  (Possible options: %s)'
                         % (opt, ', '.join(possibilities)))
 
-    def _process_long_opt(self, state):
-        arg = state.rargs.pop(0)
-
-        # Value explicitly attached to arg?  Pretend it's the next
-        # argument.
+    def _process_long_opt(self, arg, state):
+        # Value explicitly attached to arg?  Pretend it's the next argument.
         if '=' in arg:
             opt, next_arg = arg.split('=', 1)
             state.rargs.insert(0, next_arg)
@@ -253,6 +275,8 @@ class OptionParser(object):
         else:
             opt = arg
             had_explicit_value = False
+
+        opt = normalize_opt(opt, self.ctx)
 
         opt = self._match_long_opt(opt)
         option = self._long_opt[opt]
@@ -277,13 +301,15 @@ class OptionParser(object):
 
         option.process(value, state)
 
-    def _process_short_opts(self, state):
-        arg = state.rargs.pop(0)
+    def _process_opts(self, arg, state):
+        if '=' in arg or normalize_opt(arg, self.ctx) in self._long_opt:
+            return self._process_long_opt(arg, state)
+
         stop = False
         i = 1
         prefix = arg[0]
         for ch in arg[1:]:
-            opt = prefix + ch
+            opt = normalize_opt(prefix + ch, self.ctx)
             option = self._short_opt.get(opt)
             i += 1
 

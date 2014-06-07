@@ -8,7 +8,7 @@ from .utils import echo
 
 
 def pass_context(f):
-    """Marks a callback that it wants to receive the current context
+    """Marks a callback as wanting to receive the current context
     object as first argument.
     """
     f.__click_pass_context__ = True
@@ -16,7 +16,7 @@ def pass_context(f):
 
 
 def pass_obj(f):
-    """Similar to :func:`pass_context` but only pass the object on the
+    """Similar to :func:`pass_context`, but only pass the object on the
     context onwards (:attr:`Context.obj`).  This is useful if that object
     represents the state of a nested system.
     """
@@ -76,10 +76,14 @@ def _make_command(f, name, attrs, cls):
         del f.__click_params__
     except AttributeError:
         params = []
-    help = inspect.getdoc(f)
-    if isinstance(help, bytes):
-        help = help.decode('utf-8')
-    attrs.setdefault('help', help)
+    help = attrs.get('help')
+    if help is None:
+        help = inspect.getdoc(f)
+        if isinstance(help, bytes):
+            help = help.decode('utf-8')
+    else:
+        help = inspect.cleandoc(help)
+    attrs['help'] = help
     return cls(name=name or f.__name__.lower(),
                callback=f, params=params, **attrs)
 
@@ -87,7 +91,7 @@ def _make_command(f, name, attrs, cls):
 def command(name=None, cls=None, **attrs):
     """Creates a new :class:`Command` and uses the decorated function as
     callback.  This will also automatically attach all decorated
-    :func:`option`\s and :func:`argument`\s as paramters to the command.
+    :func:`option`\s and :func:`argument`\s as parameters to the command.
 
     The name of the command defaults to the name of the function.  If you
     want to change that, you can pass the intended name as the first
@@ -131,7 +135,7 @@ def _param_memo(f, param):
 
 def argument(*param_decls, **attrs):
     """Attaches an option to the command.  All positional arguments are
-    passed as parameter declarations to :class:`Argment`, all keyword
+    passed as parameter declarations to :class:`Argument`; all keyword
     arguments are forwarded unchanged.  This is equivalent to creating an
     :class:`Option` instance manually and attaching it to the
     :attr:`Command.params` list.
@@ -144,25 +148,27 @@ def argument(*param_decls, **attrs):
 
 def option(*param_decls, **attrs):
     """Attaches an option to the command.  All positional arguments are
-    passed as parameter declarations to :class:`Option`, all keyword
+    passed as parameter declarations to :class:`Option`; all keyword
     arguments are forwarded unchanged.  This is equivalent to creating an
     :class:`Option` instance manually and attaching it to the
     :attr:`Command.params` list.
     """
     def decorator(f):
+        if 'help' in attrs:
+            attrs['help'] = inspect.cleandoc(attrs['help'])
         _param_memo(f, Option(param_decls, **attrs))
         return f
     return decorator
 
 
 def confirmation_option(*param_decls, **attrs):
-    """Shortcut for confirmation prompts that can be ignored by bypassed
+    """Shortcut for confirmation prompts that can be ignored by passing
     ``--yes`` as parameter.
 
     This is equivalent to decorating a function with :func:`option` with
     the following parameters::
 
-        def callback(ctx, value):
+        def callback(ctx, param, value):
             if not value:
                 ctx.abort()
 
@@ -173,7 +179,7 @@ def confirmation_option(*param_decls, **attrs):
             pass
     """
     def decorator(f):
-        def callback(ctx, value):
+        def callback(ctx, param, value):
             if not value:
                 ctx.abort()
         attrs.setdefault('is_flag', True)
@@ -223,8 +229,8 @@ def version_option(version=None, *param_decls, **attrs):
         prog_name = attrs.pop('prog_name', None)
         message = attrs.pop('message', '%(prog)s, version %(version)s')
 
-        def callback(ctx, value):
-            if not value:
+        def callback(ctx, param, value):
+            if not value or ctx.resilient_parsing:
                 return
             prog = prog_name
             if prog is None:
@@ -262,16 +268,16 @@ def version_option(version=None, *param_decls, **attrs):
 def help_option(*param_decls, **attrs):
     """Adds a ``--help`` option which immediately ends the program
     printing out the help page.  This is usually unnecessary to add as
-    this is added by default to all commands unless supressed.
+    this is added by default to all commands unless suppressed.
 
-    Like :func:`version_option` this is implemented as eager option that
+    Like :func:`version_option`, this is implemented as eager option that
     prints in the callback and exits.
 
     All arguments are forwarded to :func:`option`.
     """
     def decorator(f):
-        def callback(ctx, value):
-            if value:
+        def callback(ctx, param, value):
+            if value and not ctx.resilient_parsing:
                 echo(ctx.get_help())
                 ctx.exit()
         attrs.setdefault('is_flag', True)

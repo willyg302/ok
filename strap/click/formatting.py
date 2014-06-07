@@ -1,14 +1,14 @@
-import textwrap
 from contextlib import contextmanager
-
 from .termui import get_terminal_size
+from .parser import split_opt
+from ._compat import term_len
 
 
 def measure_table(rows):
     widths = {}
     for row in rows:
         for idx, col in enumerate(row):
-            widths[idx] = max(widths.get(idx, 0), len(col))
+            widths[idx] = max(widths.get(idx, 0), term_len(col))
     return tuple(y for x, y in sorted(widths.items()))
 
 
@@ -18,56 +18,14 @@ def iter_rows(rows, col_count):
         yield row + ('',) * (col_count - len(row))
 
 
-class TextWrapper(textwrap.TextWrapper):
-
-    def _cutdown(self, ucstr, space_left):
-        l = 0
-        for i in xrange(len(ucstr)):
-            l += len(ucstr[i])
-            if space_left < l:
-                return (ucstr[:i], ucstr[i:])
-        return ucstr, ''
-
-    def _handle_long_word(self, reversed_chunks, cur_line, cur_len, width):
-        space_left = max(width - cur_len, 1)
-
-        if self.break_long_words:
-            cut, res = self._cutdown(reversed_chunks[-1], space_left)
-            cur_line.append(cut)
-            reversed_chunks[-1] = res
-        elif not cur_line:
-            cur_line.append(reversed_chunks.pop())
-
-    @contextmanager
-    def extra_indent(self, indent):
-        old_initial_indent = self.initial_indent
-        old_subsequent_indent = self.subsequent_indent
-        self.initial_indent += indent
-        self.subsequent_indent += indent
-        try:
-            yield
-        finally:
-            self.initial_indent = old_initial_indent
-            self.subsequent_indent = old_subsequent_indent
-
-    def indent_only(self, text):
-        rv = []
-        for idx, line in enumerate(text.splitlines()):
-            indent = self.initial_indent
-            if idx > 0:
-                indent = self.subsequent_indent
-            rv.append(indent + line)
-        return '\n'.join(rv)
-
-
 def wrap_text(text, width=78, initial_indent='', subsequent_indent='',
               preserve_paragraphs=False):
-    """A helper function that intelligently wraps text.  By default it
+    """A helper function that intelligently wraps text.  By default, it
     assumes that it operates on a single paragraph of text but if the
     `preserve_paragraphs` parameter is provided it will intelligently
     handle paragraphs (defined by two empty lines).
 
-    If paragraphs are handled a paragraph can be prefixed with an empty
+    If paragraphs are handled, a paragraph can be prefixed with an empty
     line containing the ``\\b`` character (``\\x08``) to indicate that
     no rewrapping should happen in that block.
 
@@ -80,6 +38,7 @@ def wrap_text(text, width=78, initial_indent='', subsequent_indent='',
     :param preserve_paragraphs: if this flag is set then the wrapping will
                                 intelligently handle paragraphs.
     """
+    from ._textwrap import TextWrapper
     text = text.expandtabs()
     wrapper = TextWrapper(width, initial_indent=initial_indent,
                           subsequent_indent=subsequent_indent,
@@ -106,9 +65,9 @@ def wrap_text(text, width=78, initial_indent='', subsequent_indent='',
             indent = None
         else:
             if indent is None:
-                orig_len = len(line)
+                orig_len = term_len(line)
                 line = line.lstrip()
-                indent = orig_len - len(line)
+                indent = orig_len - term_len(line)
             buf.append(line)
     _flush_par()
 
@@ -124,11 +83,11 @@ def wrap_text(text, width=78, initial_indent='', subsequent_indent='',
 
 
 class HelpFormatter(object):
-    """This class helps with formatting text based help pages.  It's
-    usually just needed for very special internal cases but it's also
+    """This class helps with formatting text-based help pages.  It's
+    usually just needed for very special internal cases, but it's also
     exposed so that developers can write their own fancy outputs.
 
-    At present it always writes into memory.
+    At present, it always writes into memory.
 
     :param indent_increment: the additional increment for each level.
     :param width: the width for the text.  This defaults to the terminal
@@ -165,8 +124,8 @@ class HelpFormatter(object):
         prefix = '%*s%s' % (self.current_indent, prefix, prog)
         self.write(prefix)
 
-        text_width = max(self.width - self.current_indent - len(prefix), 10)
-        indent = ' ' * (len(prefix) + 1)
+        text_width = max(self.width - self.current_indent - term_len(prefix), 10)
+        indent = ' ' * (term_len(prefix) + 1)
         self.write(wrap_text(args, text_width,
                              initial_indent=' ',
                              subsequent_indent=indent))
@@ -215,8 +174,8 @@ class HelpFormatter(object):
             if not second:
                 self.write('\n')
                 continue
-            if len(first) <= first_col - col_spacing:
-                self.write(' ' * (first_col - len(first)))
+            if term_len(first) <= first_col - col_spacing:
+                self.write(' ' * (first_col - term_len(first)))
             else:
                 self.write('\n')
                 self.write(' ' * (first_col + self.current_indent))
@@ -233,7 +192,7 @@ class HelpFormatter(object):
 
     @contextmanager
     def section(self, name):
-        """Helpful context manager that writes a paragraph, a heading
+        """Helpful context manager that writes a paragraph, a heading,
         and the indents.
 
         :param name: the section name that is written as heading.
@@ -258,3 +217,23 @@ class HelpFormatter(object):
     def getvalue(self):
         """Returns the buffer contents."""
         return ''.join(self.buffer)
+
+
+def join_options(options):
+    """Given a list of option strings this joins them in the most appropriate
+    way and returns them in the form ``(formatted_string,
+    any_prefix_is_slash)`` where the second item in the tuple is a flag that
+    indicates if any of the option prefixes was a slash.
+    """
+    rv = []
+    any_prefix_is_slash = False
+    for opt in options:
+        prefix = split_opt(opt)[0]
+        if prefix == '/':
+            any_prefix_is_slash = True
+        rv.append((len(prefix), opt))
+
+    rv.sort(key=lambda x: x[0])
+
+    rv = ', '.join(x[1] for x in rv)
+    return rv, any_prefix_is_slash

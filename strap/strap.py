@@ -117,28 +117,10 @@ def _run(dir, tasks):
 	log(0, 'All tasks complete!')
 
 
-def query_yes_no(query, default='yes'):
-	valid = {
-		'yes': True,
-		'y': True,
-		'no': False,
-		'n': False
-	}
-	if default not in ['yes', 'no', None]:
-		default = None
-	while True:
-		choice = raw_input('{} [{}/{}]: '.format(query, 'Y' if default == 'yes' else 'y', 'N' if default == 'no' else 'n')).lower()
-		if default and not choice:
-			return valid[default]
-		elif choice in valid:
-			return valid[choice]
-		else:
-			print('Please respond with "yes" or "no" (or "y" or "n").')
-
 # Deletes [dir] if it exists and the user approves
 def verify_write_directory(dir):
 	if os.path.isdir(dir):
-		if not query_yes_no('The directory "{}" already exists! Overwrite?'.format(dir)):
+		if not click.confirm('The directory "{}" already exists! Overwrite?'.format(dir)):
 			raise Exception('Operation aborted by user.')
 		shutil.rmtree(dir)
 
