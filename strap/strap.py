@@ -109,7 +109,7 @@ def run_task(task):
 			run_task(t)
 	else:
 		if hasattr(task, '__call__'):
-			log(2, 'Running task {}'.format(task.__doc__ if task.__doc__ else task.__name__))
+			log(2, 'Running task {}'.format(task.__doc__ or task.__name__))
 			task()
 		else:
 			shell(task)
@@ -165,7 +165,7 @@ def copy(source, dest):
 def _init(source, dest):
 	log(0, 'Fetching project')
 	if re.search('(?:https?|git(hub)?|gh)(?:://|@)?', source):
-		clone(source, dest if dest else os.getcwd())
+		clone(source, dest or os.getcwd())
 	elif dest:
 		copy(source, dest)
 	else:
