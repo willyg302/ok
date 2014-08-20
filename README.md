@@ -2,7 +2,7 @@
 
 ---
 
-A simple tool for cloning, copying, and initializing Python projects, because bootstrapping shouldn't be so gosh-durn hard. Inspired by [init-skeleton](https://github.com/paulmillr/init-skeleton).
+A simple tool for cloning, copying, and initializing projects, because bootstrapping shouldn't be so gosh-durn hard. Inspired by [init-skeleton](https://github.com/paulmillr/init-skeleton).
 
 ## Install
 
@@ -18,13 +18,13 @@ strap <command> [<args>...]
 
 Where `command` is one of `init` or `run`. Calling `strap` without any arguments is equivalent to `strap run default`.
 
-> **Note**: All subcommands allow the `--verbose` flag, which is false by default to suppress the console spam that many installations generate. If you'd like to see all output, add this flag.
+> **Note**: All subcommands allow the `--silent` flag, which is false by default. If you'd like to suppress the console spam that many installations generate, add this flag.
 
 > **Note**: It may be necessary to `sudo` to elevate privileges, as strap.py installs necessary tools globally if they are not present. If you are using strap.py via an alias, don't forget to add `alias sudo='sudo '` to your shell's profile.
 
 ### init
 
-`strap init [-v, --verbose] [-d, --dest=PATH] <source>`
+`strap init [-s, --silent] [-d, --dest=PATH] <source>`
 
 `source` can either be a directory or a GitHub repo URI. `dest` is an optional directory. If `dest` is given, then `source` will be cloned or copied into it. If `dest` is omitted, then `source` will either be cloned into the current working directory (if it is a URI) or "refreshed" (if it is a directory, the equivalent of `strap run install`).
 
@@ -40,15 +40,15 @@ strap init git@github.com:willyg302/jarvis.git -d ~/jarvis-test
 
 ### run
 
-`strap run [-v, --verbose] [-d, --dir=PATH] <task>...`
+`strap run [-s, --silent] [-d, --dir=PATH] <task>...`
 
-You can provide a list of one or more `task` to run. If given, `dir` specifies the path to execute tasks from; it defaults to the current working directory. Note that calling `strap` (no arguments) is equivalent to `strap run default` (but does not allow the `--verbose` flag).
+You can provide a list of one or more `task` to run. If given, `dir` specifies the path to execute tasks from; it defaults to the current working directory. Note that calling `strap` (no arguments) is equivalent to `strap run default` (but does not allow the `--silent` flag).
 
 **Examples**:
 
 ```bash
 strap
-strap run sometask --verbose
+strap run sometask --silent
 strap run task_a task_b also_do_this --dir from/this/directory
 ```
 
