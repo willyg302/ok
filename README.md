@@ -1,4 +1,4 @@
-![strap.py](https://rawgit.com/willyg302/strap.py/master/strap-logo.svg "There's a snake in mah boot!")
+![strap.py](https://raw.github.com/willyg302/strap.py/master/strap-logo-922.png "There's a snake in mah boot!")
 
 ---
 

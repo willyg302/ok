@@ -7,6 +7,7 @@ import re
 import shutil
 import contextlib
 import imp
+import json
 
 
 from collections import namedtuple
@@ -15,26 +16,47 @@ from clip import *
 from utils import StrapException, directory, normalize_path, shell, ANSI
 
 
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 
 STRAP_FILE = 'strapme.py'
 
-# @TODO: Persistent cache in JSON file, cache subcommand
+
 class DependencyCache:
 
 	def __init__(self):
-		self.cache = {}
+		with directory(os.path.dirname(os.path.abspath(__file__))):
+			if os.path.isfile('.depcache.json'):
+				with open('.depcache.json', 'r') as f:
+					self.cache = json.load(f)
+			else:
+				self.cache = {}
+
+	def _save(self):
+		with directory(os.path.dirname(os.path.abspath(__file__))):
+			with open('.depcache.json', 'w') as f:
+				json.dump(self.cache, f)
 
 	def load(self, module, check_func, install_func):
+		if self.cache.get(module):
+			return
 		log('Checking whether {} is installed...'.format(module), important=False)
-		if module in self.cache or check_func():
+		if check_func():
+			self.cache[module] = True
 			return
 		log('{} not installed, installing now...'.format(module))
 		try:
 			install_func()
 		except Exception as e:
+			self.cache[module] = False
 			raise StrapException('Unable to install module {}: {}'.format(module, e.message))
 		self.cache[module] = True
+
+	def clean(self):
+		self.cache = {}
+
+	def list(self):
+		for k, v in self.cache.iteritems():
+			print('{}{}'.format(ANSI.decorate('[failed] ', ANSI.COLOR['red']) if not v else '', k))
 
 
 class Strap:
@@ -171,7 +193,12 @@ def _init(source, dest):
 		_run(source, ['install'])
 
 
+def _cache(action):
+	getattr(strap._depcache, action)()
+
+
 def done(err):
+	strap._depcache._save()
 	if err:
 		print(err, file=sys.stderr)
 		status = ANSI.decorate('There were errors.', ANSI.COLOR['red'])
@@ -206,6 +233,10 @@ def init(source, dest, silent, callback=done):
 def run(tasks, dir, silent, callback=done):
 	funwrap(_run, {'dir': dir, 'tasks': list(tasks)}, silent, callback)
 
+@app.cmd(help='Manage strap.py\'s dependency cache')
+@app.cmd_arg('action', choices=['clean', 'list'])
+def cache(action, callback=done):
+	funwrap(_cache, {'action': action}, False, callback)
 
 def main():
 	if len(sys.argv) == 1:
