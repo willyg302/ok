@@ -1,6 +1,12 @@
 import os
 import contextlib
 
+from subprocess import call, STDOUT
+
+
+class StrapException(Exception):
+	pass
+
 
 @contextlib.contextmanager
 def directory(path):
@@ -16,6 +22,13 @@ def directory(path):
 
 def normalize_path(path):
 	return path.replace('/', os.sep)
+
+def shell(command, silent=False):
+	if silent:
+		with open(os.devnull, 'w') as fnull:
+			return call(command, stdout=fnull, stderr=STDOUT, shell=True)
+	else:
+		return call(command, shell=True)
 
 
 class ANSI(object):
