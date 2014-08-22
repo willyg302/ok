@@ -12,37 +12,34 @@ Clone this repo and put the `strap/` directory somewhere convenient (for this re
 
 ```bash
 strap
-strap (--version)
-strap <command> [<args>...]
+strap [-h, --help] [--version] {init,run,cache} ...
 ```
 
-Where `command` is one of `init` or `run`. Calling `strap` without any arguments is equivalent to `strap run default`.
+Calling `strap` without any arguments is equivalent to `strap run default`.
 
-> **Note**: All subcommands allow the `--silent` flag, which is false by default. If you'd like to suppress the console spam that many installations generate, add this flag.
-
-> **Note**: It may be necessary to `sudo` to elevate privileges, as strap.py installs necessary tools globally if they are not present. If you are using strap.py via an alias, don't forget to add `alias sudo='sudo '` to your shell's profile.
+> **Note**: It may be necessary to `sudo` to elevate privileges, as strap installs necessary tools globally if they are not present. If you are using strap via an alias, don't forget to add `alias sudo='sudo '` to your shell's profile.
 
 ### init
 
-`strap init [-s, --silent] [-d, --dest=PATH] <source>`
+`strap init [-h, --help] [-d, --dest DEST] [-s, --silent] source`
 
-`source` can either be a directory or a GitHub repo URI. `dest` is an optional directory. If `dest` is given, then `source` will be cloned or copied into it. If `dest` is omitted, then `source` will either be cloned into the current working directory (if it is a URI) or "refreshed" (if it is a directory, the equivalent of `strap run install`).
+`source` can either be a directory or a GitHub repo URI. `DEST` is an optional directory. If `DEST` is given, then `source` will be cloned or copied into it. If `DEST` is omitted, then `source` will either be cloned into the current working directory (if it is a URI) or "refreshed" (if it is a directory, the equivalent of `strap run install`).
 
 **Examples**:
 
 ```bash
 strap init ../somedir/otherdir/strap-this
 strap init copy/this --dest ../to/here/and-then-strap-it
-strap init -v https://github.com/willyg302/Parrot
+strap init -s https://github.com/willyg302/Parrot
 strap init gh:willyg302/jarvis
 strap init git@github.com:willyg302/jarvis.git -d ~/jarvis-test
 ```
 
 ### run
 
-`strap run [-s, --silent] [-d, --dir=PATH] <task>...`
+`strap run [-h, --help] [-d, --dir DIR] [-s, --silent] [tasks [tasks ...]]`
 
-You can provide a list of one or more `task` to run. If given, `dir` specifies the path to execute tasks from; it defaults to the current working directory. Note that calling `strap` (no arguments) is equivalent to `strap run default` (but does not allow the `--silent` flag).
+You can provide a list of one or more `tasks` to run. If given, `DIR` specifies the path to execute tasks from; it defaults to the current working directory. Note that calling `strap run` (no arguments) is equivalent to `strap run default`.
 
 **Examples**:
 
@@ -51,6 +48,12 @@ strap
 strap run sometask --silent
 strap run task_a task_b also_do_this --dir from/this/directory
 ```
+
+### cache
+
+`strap cache [-h, --help] {clean,list}`
+
+Use this command to manage strap's dependency cache. You can `list` currently known modules (including ones that have failed to install) and `clean` the cache to start anew.
 
 ### strapme.py
 
@@ -101,22 +104,27 @@ Essentially, each function defined in `strapme.py` is a task. The "install" and 
 
 #### API
 
-strap.py exposes the `strap` variable for use in tasks. This variable has the following functions:
+strap exposes the `strap` variable for use in tasks. This variable has the following standard functions:
 
 Function       | Description
 -------------- | -----------
 `root()`       | Pass a path to a directory to carry out the task in. Use with the `with` statement.
+`freeze()`     | Pass the name of a file to `pip freeze` into. Only really useful within a virtual environment.
+`run()`        | Either a single subtask or a list of subtasks to run. Each subtask may either be a Python function or a string that will be interpreted as a shell command. Returns `self` for chaining.
+
+The following modules are also defined:
+
+Module         | Description
+-------------- | -----------
+`pip()`        | Call any regular pip command. Returns `self` for chaining.
 `virtualenv()` | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
-`shell()`      | Executes a shell command given as a string.
-`freeze()`     | Pass the name of a file to `pip freeze` into. Only really useful with a virtual environment.
-`run()`        | Either a single subtask or a list of subtasks to run. Each subtask may either be a Python function or a string that will be interpreted as a shell command.
 
 ### From Code
 
-You can also use strap.py programmatically, if that's your cup of tea:
+You can also use strap programmatically, if that's your cup of tea:
 
 **COMING SOON**
 
 ## Why?
 
-I found myself writing the same old code for every Python project to automate its installation. Conventional programmer's logic states that if you do it more than once, it should become a tool.
+I found myself writing the same old code for every project to automate its installation. Conventional programmer's logic states that if you do it more than once, it should become a tool.

@@ -59,6 +59,15 @@ class DependencyCache:
 			print('{}{}'.format(ANSI.decorate('[failed] ', ANSI.COLOR['red']) if not v else '', k))
 
 
+def module(check_func, install_func):
+	def wrap(f):
+		def wrapped_f(self, *args, **kwargs):
+			self._depcache.load(f.__name__, lambda: check_func(self), lambda: install_func(self))
+			return f(self, *args, **kwargs)
+		return wrapped_f
+	return wrap
+
+
 class Strap:
 
 	def __init__(self):
@@ -77,32 +86,23 @@ class Strap:
 		except KeyboardInterrupt:
 			pass
 
-	def pip(self, command):
-		def check_func():
-			return shell('pip --version', silent=True) == 0
-		def install_func():
-			with directory(os.path.dirname(os.path.abspath(__file__))):  # This has to be done relative to strap.py
-				self._shell('python lib/ez_setup.py')
-				self._shell('python lib/get-pip.py')
-		self._depcache.load('pip', check_func, install_func)
+	def _install_pip(self):
+		with directory(os.path.dirname(os.path.abspath(__file__))):  # This has to be done relative to strap.py
+			self._shell('python lib/ez_setup.py')
+			self._shell('python lib/get-pip.py')
 
+	@module(lambda _: shell('pip --version', silent=True) == 0, _install_pip)
+	def pip(self, command):
 		self._shell('pip {}'.format(command))
 		return self
 
-	@contextlib.contextmanager
-	def root(self, path):
-		with directory(normalize_path(path)):
-			yield
+	def _install_virtualenv(self):
+		self.pip('install virtualenv')
 
+	@module(lambda _: shell('virtualenv --version', silent=True) == 0, _install_virtualenv)
 	@contextlib.contextmanager
 	def virtualenv(self, path):
 		try:
-			def check_func():
-				return shell('virtualenv --version', silent=True) == 0
-			def install_func():
-				self.pip('install virtualenv')
-			self._depcache.load('virtualenv', check_func, install_func)
-
 			path = normalize_path(path)
 
 			# Check if our virtual environment is already created, and create if not
@@ -115,6 +115,11 @@ class Strap:
 			yield
 		finally:
 			self._env = None
+
+	@contextlib.contextmanager
+	def root(self, path):
+		with directory(normalize_path(path)):
+			yield
 
 	def freeze(self, filename):
 		self.pip('freeze > {}'.format(filename))
@@ -233,7 +238,7 @@ def init(source, dest, silent, callback=done):
 def run(tasks, dir, silent, callback=done):
 	funwrap(_run, {'dir': dir, 'tasks': list(tasks)}, silent, callback)
 
-@app.cmd(help='Manage strap.py\'s dependency cache')
+@app.cmd(help='Manage strap\'s dependency cache')
 @app.cmd_arg('action', choices=['clean', 'list'])
 def cache(action, callback=done):
 	funwrap(_cache, {'action': action}, False, callback)
