@@ -53,8 +53,12 @@ class DependencyCache:
 
 	def clean(self):
 		self.cache = {}
+		log('Dependency cache successfully cleaned')
 
 	def list(self):
+		if not self.cache:
+			log('Cache is empty')
+			return
 		for k, v in self.cache.iteritems():
 			print('{}{}'.format(ANSI.decorate('[failed] ', ANSI.COLOR['red']) if not v else '', k))
 
@@ -86,9 +90,18 @@ class Strap:
 		except KeyboardInterrupt:
 			pass
 
-	def _install_pip(self):
+	def _install_easy_install(self):
 		with directory(os.path.dirname(os.path.abspath(__file__))):  # This has to be done relative to strap.py
 			self._shell('python lib/ez_setup.py')
+
+	@module(lambda _: shell('easy_install --version', silent=True) == 0, _install_easy_install)
+	def easy_install(self, command):
+		self._shell('easy_install {}'.format(command))
+		return self
+
+	def _install_pip(self):
+		with directory(os.path.dirname(os.path.abspath(__file__))):  # This has to be done relative to strap.py
+			self.easy_install('--version')  # Ping to check if setuptools is installed
 			self._shell('python lib/get-pip.py')
 
 	@module(lambda _: shell('pip --version', silent=True) == 0, _install_pip)
@@ -202,8 +215,11 @@ def _cache(action):
 	getattr(strap._depcache, action)()
 
 
-def done(err):
+def cache_done(err):
 	strap._depcache._save()
+
+def done(err):
+	cache_done(err)
 	if err:
 		print(err, file=sys.stderr)
 		status = ANSI.decorate('There were errors.', ANSI.COLOR['red'])
@@ -240,7 +256,7 @@ def run(tasks, dir, silent, callback=done):
 
 @app.cmd(help='Manage strap\'s dependency cache')
 @app.cmd_arg('action', choices=['clean', 'list'])
-def cache(action, callback=done):
+def cache(action, callback=cache_done):
 	funwrap(_cache, {'action': action}, False, callback)
 
 def main():

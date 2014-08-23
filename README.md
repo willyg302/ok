@@ -114,10 +114,11 @@ Function       | Description
 
 The following modules are also defined:
 
-Module         | Description
--------------- | -----------
-`pip()`        | Call any regular pip command. Returns `self` for chaining.
-`virtualenv()` | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
+Module           | Description
+---------------- | -----------
+`easy_install()` | Call any regular easy_install command. Returns `self` for chaining.
+`pip()`          | Call any regular pip command. Returns `self` for chaining.
+`virtualenv()`   | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
 
 ### From Code
 
