@@ -147,7 +147,7 @@ class Strap:
 				task()
 			else:
 				# First check whether we can offload task to a function in this class
-				fname, fargs = task.split(' ', 1)
+				fname, fargs = task.partition(' ')[::2]
 				f = getattr(self, fname, None)
 				if callable(f):
 					f(fargs)
