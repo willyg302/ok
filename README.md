@@ -129,3 +129,10 @@ You can also use strap programmatically, if that's your cup of tea:
 ## Why?
 
 I found myself writing the same old code for every project to automate its installation. Conventional programmer's logic states that if you do it more than once, it should become a tool.
+
+## Roadmap (v0.4.0)
+
+- [ ] Clean up and refactor existing code to be more modular
+- [ ] Add Node/NPM modules
+- [ ] Basic tests
+- [ ] Programmatic functionality and documentation

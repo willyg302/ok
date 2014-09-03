@@ -181,7 +181,7 @@ def _run(dir, tasks):
 # Deletes [dir] if it exists and the user approves
 def verify_write_directory(dir):
 	if os.path.isdir(dir):
-		if not click.confirm('The directory "{}" already exists! Overwrite?'.format(dir)):
+		if not App.confirm('The directory "{}" already exists! Overwrite?'.format(dir)):
 			raise Exception('Operation aborted by user.')
 		shutil.rmtree(dir)
 
@@ -214,9 +214,23 @@ def _init(source, dest):
 def _cache(action):
 	getattr(strap._depcache, action)()
 
-
 def cache_done(err):
 	strap._depcache._save()
+
+def _list():
+	from inspect import getmembers, isfunction
+	with directory(os.getcwd()):
+		if not os.path.isfile(STRAP_FILE):
+			raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
+		config = imp.load_source('strapme', os.path.abspath(STRAP_FILE))
+		d = {e[0]: e[1] for e in getmembers(config, isfunction) if not e[0].startswith('_')}
+		col_width = max(len(k) for k, v in d.iteritems()) + 2
+		for k, v in d.iteritems():
+			print('{}{}'.format(k.ljust(col_width), v.__doc__ or ''))
+
+def list_done(err):
+	if err:
+		print(err, file=sys.stderr)
 
 def done(err):
 	cache_done(err)
@@ -258,6 +272,10 @@ def run(tasks, dir, silent, callback=done):
 @app.cmd_arg('action', choices=['clean', 'list'])
 def cache(action, callback=cache_done):
 	funwrap(_cache, {'action': action}, False, callback)
+
+@app.cmd(name='list', help='List the tasks defined in a project\'s strapme file')
+def list_tasks(callback=list_done):
+	funwrap(_list, {}, False, callback)
 
 def main():
 	if len(sys.argv) == 1:
