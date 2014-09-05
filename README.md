@@ -2,7 +2,7 @@
 
 ---
 
-A simple tool for cloning, copying, and initializing projects, because bootstrapping shouldn't be so gosh-durn hard. Inspired by [init-skeleton](https://github.com/paulmillr/init-skeleton).
+strap is Make for stupid people: a simple tool for cloning, copying, and initializing projects, because bootstrapping shouldn't be so gosh-durn hard. Inspired by [init-skeleton](https://github.com/paulmillr/init-skeleton).
 
 ## Install
 
@@ -54,6 +54,12 @@ strap run task_a task_b also_do_this --dir from/this/directory
 `strap cache [-h, --help] {clean,list}`
 
 Use this command to manage strap's dependency cache. You can `list` currently known modules (including ones that have failed to install) and `clean` the cache to start anew.
+
+### list
+
+`strap list [-h, --help]`
+
+List the available tasks defined in a project's `strapme.py`. By convention, functions beginning with an underscore are ignored.
 
 ### strapme.py
 
@@ -119,6 +125,8 @@ Module           | Description
 `easy_install()` | Call any regular easy_install command. Returns `self` for chaining.
 `pip()`          | Call any regular pip command. Returns `self` for chaining.
 `virtualenv()`   | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
+`node`           | Call any regular node command. Returns `self` for chaining.
+`npm`            | Call any regular npm command. Returns `self` for chaining.
 
 ### From Code
 
@@ -133,6 +141,6 @@ I found myself writing the same old code for every project to automate its insta
 ## Roadmap (v0.4.0)
 
 - [ ] Clean up and refactor existing code to be more modular
-- [ ] Add Node/NPM modules
+- [x] Add Node/NPM modules
 - [ ] Basic tests
 - [ ] Programmatic functionality and documentation

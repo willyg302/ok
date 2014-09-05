@@ -129,6 +129,19 @@ class Strap:
 		finally:
 			self._env = None
 
+	def _install_node(self):
+		raise StrapException('Installation must be done manually.\nPlease visit http://nodejs.org/ for installation instructions.')
+
+	@module(lambda _: shell('node --version', silent=True) == 0, _install_node)
+	def node(self, command):
+		self._shell('node {}'.format(command))
+		return self
+
+	@module(lambda _: shell('npm --version', silent=True) == 0, _install_node)
+	def npm(self, command):
+		self._shell('npm {}'.format(command))
+		return self
+
 	@contextlib.contextmanager
 	def root(self, path):
 		with directory(normalize_path(path)):
