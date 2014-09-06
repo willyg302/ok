@@ -238,8 +238,8 @@ def _list():
 		config = imp.load_source('strapme', os.path.abspath(STRAP_FILE))
 		d = {e[0]: e[1] for e in getmembers(config, isfunction) if not e[0].startswith('_')}
 		col_width = max(len(k) for k, v in d.iteritems()) + 2
-		for k, v in d.iteritems():
-			print('{}{}'.format(k.ljust(col_width), v.__doc__ or ''))
+		for k in sorted(d):
+			print('{}{}'.format(k.ljust(col_width), d[k].__doc__ or ''))
 
 def list_done(err):
 	if err:
