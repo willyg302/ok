@@ -1,12 +1,17 @@
 import os
 import contextlib
+import imp
 
 from subprocess import call, STDOUT
 
 
-class StrapException(Exception):
-	pass
+__all__ = [
+	'directory', 'strap_directory', 'get_strapme', 'normalize_path', 'shell',
+	'StrapException', 'ANSI'
+]
 
+
+STRAP_FILE = 'strapme.py'
 
 @contextlib.contextmanager
 def directory(path):
@@ -20,6 +25,17 @@ def directory(path):
 	finally:
 		os.chdir(prev_cwd)
 
+@contextlib.contextmanager
+def strap_directory():
+	with directory(os.path.dirname(os.path.abspath(__file__))):
+		yield
+
+def get_strapme(dir=os.getcwd()):
+	with directory(dir):
+		if not os.path.isfile(STRAP_FILE):
+			raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
+		return imp.load_source('strapme', os.path.abspath(STRAP_FILE))
+
 def normalize_path(path):
 	return path.replace('/', os.sep)
 
@@ -29,6 +45,10 @@ def shell(command, silent=False):
 			return call(command, stdout=fnull, stderr=STDOUT, shell=True)
 	else:
 		return call(command, shell=True)
+
+
+class StrapException(Exception):
+	pass
 
 
 class ANSI(object):
