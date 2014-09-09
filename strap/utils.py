@@ -6,7 +6,7 @@ from subprocess import call, STDOUT
 
 
 __all__ = [
-	'directory', 'strap_directory', 'get_strapme', 'normalize_path', 'shell',
+	'directory', 'strap_directory', 'get_strapme', 'get_module', 'normalize_path', 'shell',
 	'StrapException', 'ANSI'
 ]
 
@@ -35,6 +35,10 @@ def get_strapme(dir=os.getcwd()):
 		if not os.path.isfile(STRAP_FILE):
 			raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
 		return imp.load_source('strapme', os.path.abspath(STRAP_FILE))
+
+def get_module(name):
+	with strap_directory():
+		return imp.load_source(name, os.path.abspath(os.path.join('modules', '{}.py'.format(name))))
 
 def normalize_path(path):
 	return path.replace('/', os.sep)

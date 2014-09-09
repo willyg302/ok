@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import os
 import sys
-import platform
 import re
 import shutil
 import contextlib
@@ -25,6 +24,9 @@ class DependencyCache:
 					self.cache = json.load(f)
 			else:
 				self.cache = {}
+			# Load a list of available modules
+			self.available_modules = [e[:-3] for e in os.listdir('modules')]
+		self.loaded_modules = {}
 
 	def _save(self):
 		with strap_directory():
@@ -35,20 +37,32 @@ class DependencyCache:
 		if self.save_on_close:
 			self._save()
 
-	def load(self, module, check_func, install_func):
-		if self.cache.get(module):
-			return
-		log('Checking whether {} is installed...'.format(module), important=False)
-		if check_func():
-			self.cache[module] = True
-			return
-		log('{} not installed, installing now...'.format(module))
-		try:
-			install_func()
-		except Exception as e:
-			self.cache[module] = False
-			raise StrapException('Unable to install module {}: {}'.format(module, e.message))
-		self.cache[module] = True
+	def load(self, module_name):
+		if module_name in self.loaded_modules:
+			return self.loaded_modules[module_name]
+		module = get_module(module_name)
+
+		# Shim some stuff into the module
+		# @TODO: There has got to be a better (but still explicit) way...
+		setattr(module, 'strap', strap)
+		setattr(module, 'shell', shell)
+		setattr(module, 'StrapException', StrapException)
+		setattr(module, 'strap_directory', strap_directory)
+		setattr(module, 'normalize_path', normalize_path)
+		setattr(module, 'log', log)
+
+		if not self.cache.get(module_name):
+			log('Checking whether {} is installed...'.format(module_name), important=False)
+			if not module.check():
+				log('{} not installed, installing now...'.format(module_name))
+				try:
+					module.install()
+				except Exception as e:
+					self.cache[module_name] = False
+					raise StrapException('Unable to install module {}: {}'.format(module_name, e.message))
+			self.cache[module_name] = True
+		self.loaded_modules[module_name] = module
+		return module
 
 	def clean(self):
 		self.cache = {}
@@ -62,16 +76,7 @@ class DependencyCache:
 			print('{}{}'.format(ANSI.decorate('[failed] ', ANSI.COLOR['red']) if not self.cache[k] else '', k))
 
 
-def module(check_func, install_func):
-	def wrap(f):
-		def wrapped_f(self, *args, **kwargs):
-			self._depcache.load(f.__name__, lambda: check_func(self), lambda: install_func(self))
-			return f(self, *args, **kwargs)
-		return wrapped_f
-	return wrap
-
-
-class Strap:
+class Strap(object):
 
 	def __init__(self):
 		self._env = None
@@ -79,7 +84,14 @@ class Strap:
 		self.silent = False
 		self.notify_on_close = True
 
-	def close(self, err):
+	def __getattr__(self, name):
+		if name in self._depcache.available_modules:
+			def wrapped_f(*args, **kwargs):
+				return self._depcache.load(name).run(*args, **kwargs)
+			return wrapped_f
+		raise AttributeError('Method "{}" not recognized!'.format(name))
+
+	def _close(self, err):
 		self._depcache.close()
 		if self.notify_on_close:
 			status, color = ('There were errors.', 'red') if err else ('No error!', 'green')
@@ -95,58 +107,6 @@ class Strap:
 				raise StrapException('Return value {} on call to {}'.format(ret, command))
 		except KeyboardInterrupt:
 			pass
-
-	def _install_easy_install(self):
-		with strap_directory():  # This has to be done relative to strap.py
-			self._shell('python lib/ez_setup.py')
-
-	@module(lambda _: shell('easy_install --version', silent=True) == 0, _install_easy_install)
-	def easy_install(self, command):
-		self._shell('easy_install {}'.format(command))
-		return self
-
-	def _install_pip(self):
-		with strap_directory():  # This has to be done relative to strap.py
-			self.easy_install('--version')  # Ping to check if setuptools is installed
-			self._shell('python lib/get-pip.py')
-
-	@module(lambda _: shell('pip --version', silent=True) == 0, _install_pip)
-	def pip(self, command):
-		self._shell('pip {}'.format(command))
-		return self
-
-	def _install_virtualenv(self):
-		self.pip('install virtualenv')
-
-	@module(lambda _: shell('virtualenv --version', silent=True) == 0, _install_virtualenv)
-	@contextlib.contextmanager
-	def virtualenv(self, path):
-		try:
-			path = normalize_path(path)
-
-			# Check if our virtual environment is already created, and create if not
-			log('Checking virtual environment')
-			if not os.path.isdir(path):
-				log('Creating virtual environment at {}...'.format(os.path.basename(path)))
-				self._shell('virtualenv {}'.format(path), force_global=True)
-
-			self._env = normalize_path('{}/{}'.format(path, 'Scripts' if platform.system() == 'Windows' else 'bin'))
-			yield
-		finally:
-			self._env = None
-
-	def _install_node(self):
-		raise StrapException('Installation must be done manually.\nPlease visit http://nodejs.org/ for installation instructions.')
-
-	@module(lambda _: shell('node --version', silent=True) == 0, _install_node)
-	def node(self, command):
-		self._shell('node {}'.format(command))
-		return self
-
-	@module(lambda _: shell('npm --version', silent=True) == 0, _install_node)
-	def npm(self, command):
-		self._shell('npm {}'.format(command))
-		return self
 
 	@contextlib.contextmanager
 	def root(self, path):
@@ -165,12 +125,12 @@ class Strap:
 				log('Running task {}'.format(ANSI.decorate(task.__doc__ or task.__name__, [ANSI.BOLD, ANSI.COLOR['cyan']])))
 				task()
 			else:
-				# First check whether we can offload task to a function in this class
+				# First check whether we can offload task to a module
 				fname, fargs = task.partition(' ')[::2]
-				f = getattr(self, fname, None)
-				if callable(f):
-					f(fargs)
-				self._shell(task)
+				if fname in self._depcache.available_modules:
+					getattr(self, fname)(fargs)
+				else:
+					self._shell(task)
 		return self
 
 
@@ -268,7 +228,7 @@ def main():
 		err = e
 		print(e, file=sys.stderr)
 	finally:
-		strap.close(err)
+		strap._close(err)
 
 if __name__ == '__main__':
 	main()
