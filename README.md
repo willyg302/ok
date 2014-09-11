@@ -140,7 +140,7 @@ I found myself writing the same old code for every project to automate its insta
 
 ## Roadmap (v0.4.0)
 
-- [ ] Clean up and refactor existing code to be more modular
+- [x] Clean up and refactor existing code to be more modular
 - [x] Add Node/NPM modules
 - [ ] Basic tests
 - [ ] Programmatic functionality and documentation
