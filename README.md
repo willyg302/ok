@@ -116,17 +116,20 @@ Function       | Description
 -------------- | -----------
 `root()`       | Pass a path to a directory to carry out the task in. Use with the `with` statement.
 `freeze()`     | Pass the name of a file to `pip freeze` into. Only really useful within a virtual environment.
+`ping()`       | "Ping" a shell command, returning `True` if the process exits with code 0.
 `run()`        | Either a single subtask or a list of subtasks to run. Each subtask may either be a Python function or a string that will be interpreted as a shell command. Returns `self` for chaining.
 
 The following modules are also defined:
 
-Module           | Description
----------------- | -----------
-`easy_install()` | Call any regular easy_install command. Returns `self` for chaining.
-`pip()`          | Call any regular pip command. Returns `self` for chaining.
-`virtualenv()`   | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
-`node()`         | Call any regular node command. Returns `self` for chaining.
-`npm()`          | Call any regular npm command. Returns `self` for chaining.
+Module         | Returns `self` | Description
+-------------- | -------------- | -----------
+`bower`        | Yes            | Call any regular bower command. Pass an optional `root` kwarg to define the directory to execute bower in.
+`easy_install` | Yes            | Call any regular easy_install command.
+`make`         | Yes            | Call any regular make command, or no command to simply run Make.
+`node`         | Yes            | Call any regular node command. Pass the `module=True` kwarg to identify the command as a Node module (e.g. `gulp`) to be run locally.
+`npm`          | Yes            | Call any regular npm command.
+`pip`          | Yes            | Call any regular pip command.
+`virtualenv`   | No             | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
 
 ### From Code
 

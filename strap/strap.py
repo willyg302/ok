@@ -45,7 +45,6 @@ class DependencyCache:
 		# Shim some stuff into the module
 		# @TODO: There has got to be a better (but still explicit) way...
 		setattr(module, 'strap', strap)
-		setattr(module, 'shell', shell)
 		setattr(module, 'StrapException', StrapException)
 		setattr(module, 'strap_directory', strap_directory)
 		setattr(module, 'normalize_path', normalize_path)
@@ -115,6 +114,9 @@ class Strap(object):
 
 	def freeze(self, filename):
 		self.pip('freeze > {}'.format(filename))
+
+	def ping(self, command):
+		return shell(command, silent=True) == 0
 
 	def run(self, task):
 		if isinstance(task, (list, tuple)):

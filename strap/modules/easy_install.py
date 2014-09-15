@@ -1,5 +1,5 @@
 def check():
-	return shell('easy_install --version', silent=True) == 0
+	return strap.ping('easy_install --version')
 
 def install():
 	with strap_directory():  # This has to be done relative to strap.py

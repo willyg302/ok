@@ -1,5 +1,5 @@
 def check():
-	return shell('bower --version', silent=True) == 0
+	return strap.ping('bower --version')
 
 def install():
 	strap.npm('install -g bower')

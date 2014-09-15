@@ -4,7 +4,7 @@ import platform
 
 
 def check():
-	return shell('virtualenv --version', silent=True) == 0
+	return strap.ping('virtualenv --version')
 
 def install():
 	strap.pip('install virtualenv')
