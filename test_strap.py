@@ -1,22 +1,18 @@
 import unittest
 import sys
+import shlex
 
-from cStringIO import StringIO
+from subprocess import Popen, PIPE
 
 from strap import strap
 
 
-# http://stackoverflow.com/questions/16571150/how-to-capture-stdout-output-from-a-python-function-call
-class Capturing(list):
+def capture(command):
+	p = Popen(shlex.split(command), stdout=PIPE, stderr=PIPE)
+	return p.communicate()
 
-	def __enter__(self):
-		self._stdout = sys.stdout
-		sys.stdout = self._ioout = StringIO()
-		return self
-
-	def __exit__(self, *args):
-		self.extend(self._ioout.getvalue().splitlines())
-		sys.stdout = self._stdout
+def call_strap(args):
+	return capture('python strap {}'.format(args))
 
 
 class TestStrap(unittest.TestCase):
@@ -25,9 +21,8 @@ class TestStrap(unittest.TestCase):
 		strap.strap = strap.Strap()
 
 	def test_version(self):
-		with Capturing() as output:
-			strap.cache('list')
-		self.assertIsInstance(output, list)
+		_, err = call_strap('--version')
+		self.assertTrue(err.startswith('strap version'))
 
 
 if __name__ == '__main__':
