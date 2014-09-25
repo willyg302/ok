@@ -30,11 +30,10 @@ def strap_directory():
 	with directory(os.path.dirname(os.path.abspath(__file__))):
 		yield
 
-def get_strapme(dir=os.getcwd()):
-	with directory(dir):
-		if not os.path.isfile(STRAP_FILE):
-			raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
-		return imp.load_source('strapme', os.path.abspath(STRAP_FILE))
+def get_strapme():
+	if not os.path.isfile(STRAP_FILE):
+		raise Exception('Missing configuration file "{}"!'.format(STRAP_FILE))
+	return imp.load_source('strapme', os.path.abspath(STRAP_FILE))
 
 def get_module(name):
 	with strap_directory():

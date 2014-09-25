@@ -182,7 +182,7 @@ def init(source, dest, silent=False):
 		copy(source, dest)
 	else:
 		run_dir = source
-	run(['install'], run_dir)
+	run(['install'], run_dir, silent)
 
 @app.cmd(help='Run one or more tasks defined in a project\'s strapme file')
 @app.cmd_arg('tasks', nargs='*', default=['default'], help='The task(s) to run')
@@ -191,7 +191,7 @@ def init(source, dest, silent=False):
 def run(tasks, dir, silent=False):
 	strap.silent = silent
 	with directory(dir):
-		config = get_strapme(dir)
+		config = get_strapme()
 		log('Running tasks on {}'.format(config.project if hasattr(config, 'project') else os.path.basename(dir)))
 		setattr(config, 'strap', strap)
 		for task in tasks:
