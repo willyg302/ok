@@ -154,7 +154,7 @@ def verify_write_directory(dir):
 def clone(source, dest):
 	verify_write_directory(dest)
 	github = '(gh|github)\:(?://)?'
-	url = 'git://github.com/{}.git'.format(re.sub(github, '', source)) if re.search(github, source) else source
+	url = 'git@github.com:{}.git'.format(re.sub(github, '', source)) if re.search(github, source) else source
 	log('Cloning git repo "{}" to "{}"...'.format(url, dest))
 	strap._shell('git clone {} {}'.format(url, dest), force_global=True)
 
