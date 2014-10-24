@@ -7,7 +7,8 @@ import shutil
 import contextlib
 import json
 
-from clip import *
+from deps.clip import *
+from deps.giturl import *
 from utils import *
 
 
@@ -150,11 +151,9 @@ def verify_write_directory(dir):
 			raise Exception('Operation aborted by user.')
 		shutil.rmtree(dir)
 
-# Clones a project from a remote URI [source] to [dest]
-def clone(source, dest):
+# Clones a project from a remote URI [url] to [dest]
+def clone(url, dest):
 	verify_write_directory(dest)
-	github = '(gh|github)\:(?://)?'
-	url = 'git@github.com:{}.git'.format(re.sub(github, '', source)) if re.search(github, source) else source
 	log('Cloning git repo "{}" to "{}"...'.format(url, dest))
 	strap._shell('git clone {} {}'.format(url, dest), force_global=True)
 
@@ -175,14 +174,15 @@ app.arg('--version', help='Print the version', action='version', version='strap 
 def init(source, dest, silent=False):
 	strap.silent = silent
 	log('Fetching project')
-	run_dir = dest
-	if re.search('(?:https?|git(hub)?|gh)(?:://|@)?', source):
-		clone(source, dest or os.getcwd())
+	g = GitURL(source)
+	if g.valid:
+		dest = dest or g.repo
+		clone(g.to_ssh(), dest)
 	elif dest:
 		copy(source, dest)
 	else:
-		run_dir = source
-	run(['install'], run_dir, silent)
+		dest = source
+	run(['install'], dest, silent)
 
 @app.cmd(help='Run one or more tasks defined in a project\'s strapme file')
 @app.cmd_arg('tasks', nargs='*', default=['default'], help='The task(s) to run')
