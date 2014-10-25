@@ -150,14 +150,16 @@ def verify_write_directory(dir):
 			raise Exception('Operation aborted by user.')
 		shutil.rmtree(dir)
 
-# Clones a project from a remote URI [url] to [dest]
-def clone(url, dest):
+# Clones a project from a remote URI [source] to [dest]
+def clone(source, dest):
 	verify_write_directory(dest)
-	log('Cloning git repo "{}" to "{}"...'.format(url, dest))
-	strap._shell('git clone {} {}'.format(url, dest), force_global=True)
+	log('Cloning git repo "{}" to "{}"...'.format(source, dest))
+	strap._shell('git clone {} {}'.format(source, dest), force_global=True)
 
 # Copies a project from a local directory [source] to [dest]
 def copy(source, dest):
+	if source == dest:
+		return
 	verify_write_directory(dest)
 	log('Copying directory "{}" to "{}"...'.format(source, dest))
 	shutil.copytree(source, dest)
@@ -174,14 +176,9 @@ def init(source, dest, silent=False):
 	strap.silent = silent
 	log('Fetching project')
 	g = GitURL(source)
-	if g.valid:
-		dest = dest or g.repo
-		clone(g.to_ssh(), dest)
-	elif dest:
-		copy(source, dest)
-	else:
-		dest = source
-	run(['install'], dest, silent)
+	fun, s, d = (clone, g.to_ssh(), dest or g.repo) if g.valid else (copy, source, dest or source)
+	fun(s, d)
+	run(['install'], d, silent)
 
 @app.cmd(help='Run one or more tasks defined in a project\'s strapme file')
 @app.cmd_arg('tasks', nargs='*', default=['default'], help='The task(s) to run')

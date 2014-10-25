@@ -24,6 +24,11 @@ class TestStrap(unittest.TestCase):
 		_, err = call_strap('--version')
 		self.assertTrue(err.startswith('strap version'))
 
+	def test_help(self):
+		self.assertTrue(call_strap('-h')[0].startswith('usage: strap'))
+		for e in ['init', 'run', 'cache', 'list']:
+			self.assertTrue(call_strap('{} -h'.format(e))[0].startswith('usage: {}'.format(e)))
+
 
 if __name__ == '__main__':
 	unittest.main()

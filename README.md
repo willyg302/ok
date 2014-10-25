@@ -4,6 +4,8 @@
 
 strap is Make for stupid people: a simple tool for cloning, copying, and initializing projects, because bootstrapping shouldn't be so gosh-durn hard. Inspired by [init-skeleton](https://github.com/paulmillr/init-skeleton).
 
+You can read more about the motivations in [this blog post](http://willyg302.github.io/blog/#!/post/2014-09-15-strap-make-for-stupid-people).
+
 ## Install
 
 Clone this repo and put the `strap/` directory somewhere convenient (for this readme, we will assume the user's home directory). It's also immensely helpful to alias `python ~/strap` to something like `strap`.
@@ -81,6 +83,8 @@ def task_name():
                 'pip install some-module',
                 'easy_install this-other-module'
             ])
+            # Or if you prefer...
+            strap.pip('install some-module').easy_install('this-other-module')
             strap.freeze('requirements.txt')
 
 def shell():
@@ -131,19 +135,8 @@ Module         | Returns `self` | Description
 `pip`          | Yes            | Call any regular pip command.
 `virtualenv`   | No             | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
 
-### From Code
-
-You can also use strap programmatically, if that's your cup of tea:
-
-**COMING SOON**
-
-## Why?
-
-I found myself writing the same old code for every project to automate its installation. Conventional programmer's logic states that if you do it more than once, it should become a tool.
-
 ## Roadmap (v0.4.0)
 
 - [x] Clean up and refactor existing code to be more modular
 - [x] Add Node/NPM modules
 - [ ] Basic tests
-- [ ] Programmatic functionality and documentation
