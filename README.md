@@ -135,6 +135,10 @@ Module         | Returns `self` | Description
 `pip`          | Yes            | Call any regular pip command.
 `virtualenv`   | No             | Pass the name of a virtual environment to execute in. If it does not exist, it will be created. Use with the `with` statement.
 
+## Testing
+
+Call `strap run test` while in the root directory of this repo. Yes, strap uses itself to test itself. No, you should not be surprised.
+
 ## Roadmap (v0.4.0)
 
 - [x] Clean up and refactor existing code to be more modular

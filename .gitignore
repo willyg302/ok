@@ -1,3 +1,5 @@
 *.py[cod]
 *.gz
+env/
+requirements.txt
 strap/.depcache.json

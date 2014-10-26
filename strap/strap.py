@@ -112,7 +112,7 @@ class Strap(object):
 		with directory(normalize_path(path)):
 			yield
 
-	def freeze(self, filename):
+	def freeze(self, filename='requirements.txt'):
 		self.pip('freeze > {}'.format(filename))
 
 	def ping(self, command):
