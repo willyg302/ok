@@ -1,6 +1,6 @@
 ![strap.py](https://raw.github.com/willyg302/strap.py/master/strap-logo.png "There's a snake in mah boot!")
 
----
+-----
 
 strap is Make for stupid people: a simple tool for cloning, copying, and initializing projects, because bootstrapping shouldn't be so gosh-durn hard. Inspired by [init-skeleton](https://github.com/paulmillr/init-skeleton).
 

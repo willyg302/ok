@@ -3,3 +3,5 @@
 env/
 requirements.txt
 strap/.depcache.json
+deps/*
+!__init__.py

@@ -6,7 +6,7 @@ import shutil
 import contextlib
 import json
 
-from deps.clip import *
+from deps import clip
 from deps.giturl import *
 from utils import *
 
