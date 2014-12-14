@@ -146,8 +146,7 @@ def log(message, important=True):
 # Deletes [dir] if it exists and the user approves
 def verify_write_directory(dir):
 	if os.path.isdir(dir):
-		if not App.confirm('The directory "{}" already exists! Overwrite?'.format(dir)):
-			raise Exception('Operation aborted by user.')
+		clip.confirm('The directory "{}" already exists! Overwrite?'.format(dir), abort=True)
 		shutil.rmtree(dir)
 
 # Clones a project from a remote URI [source] to [dest]
@@ -165,13 +164,20 @@ def copy(source, dest):
 	shutil.copytree(source, dest)
 
 
-app = App()
-app.arg('--version', help='Print the version', action='version', version='strap version {}'.format(__version__))
+app = clip.App()
 
-@app.cmd(help='Clone a project and run its install task')
-@app.cmd_arg('source', help='The directory or repo to clone from')
-@app.cmd_arg('-d', '--dest', help='Where to initialize the project')
-@app.cmd_arg('-s', '--silent', action='store_true')
+def print_version(value):
+	clip.exit('strap version {}'.format(__version__))
+
+@app.main(name='strap')
+@clip.flag('--version', callback=print_version, hidden=True, help='Print the version')
+@clip.flag('-s', '--silent', inherit_only=True)
+def main():
+	pass
+
+@main.subcommand(inherits=['-s'], description='Clone a project and run its install task')
+@clip.arg('source', required=True, help='The directory or repo to clone from')
+@clip.opt('-d', '--dest', help='Where to initialize the project')
 def init(source, dest, silent=False):
 	strap.silent = silent
 	log('Fetching project')
@@ -180,10 +186,9 @@ def init(source, dest, silent=False):
 	fun(s, d)
 	run(['install'], d, silent)
 
-@app.cmd(help='Run one or more tasks defined in a project\'s strapme file')
-@app.cmd_arg('tasks', nargs='*', default=['default'], help='The task(s) to run')
-@app.cmd_arg('-d', '--dir', default=os.getcwd(), help='Optional path to execute the tasks from')
-@app.cmd_arg('-s', '--silent', action='store_true')
+@main.subcommand(inherits=['-s'], description='Run one or more tasks defined in a project\'s strapme file')
+@clip.arg('tasks', nargs=-1, default=['default'], help='The task(s) to run')
+@clip.opt('-d', '--dir', default=os.getcwd(), help='Optional path to execute the tasks from')
 def run(tasks, dir, silent=False):
 	strap.silent = silent
 	with directory(dir):
@@ -197,13 +202,19 @@ def run(tasks, dir, silent=False):
 			strap.run(getattr(config, task))
 	log('All tasks complete!')
 
-@app.cmd(help='Manage strap\'s dependency cache')
-@app.cmd_arg('action', choices=['clean', 'list'])
-def cache(action):
+@main.subcommand(description='Manage strap\'s dependency cache')
+def cache():
 	strap.notify_on_close = False
-	getattr(strap._depcache, action)()
 
-@app.cmd(name='list', help='List the tasks defined in a project\'s strapme file')
+@cache.subcommand(name='clean')
+def cache_clean():
+	strap._depcache.clean()
+
+@cache.subcommand(name='list')
+def cache_list():
+	strap._depcache.list()
+
+@main.subcommand(name='list', description='List the tasks defined in a project\'s strapme file')
 def list_tasks():
 	strap.notify_on_close = False
 	from inspect import getmembers, isfunction
@@ -213,13 +224,13 @@ def list_tasks():
 		print('{}{}'.format(k.ljust(col_width), d[k].__doc__ or ''))
 
 
-def main():
+def start():
 	if len(sys.argv) == 1:
 		sys.argv.append('run')  # Run default task
 	err = None
 	try:
 		app.run()
-	except ClipExit:
+	except clip.ClipExit:
 		# Parser-level exception, such as help/version or unrecognized argument
 		strap.notify_on_close = False
 	except Exception as e:
@@ -229,4 +240,4 @@ def main():
 		strap._close(err)
 
 if __name__ == '__main__':
-	main()
+	start()

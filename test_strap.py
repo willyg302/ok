@@ -19,13 +19,13 @@ def call_strap(args):
 class TestStrap(unittest.TestCase):
 
 	def test_version(self):
-		_, err = call_strap('--version')
-		self.assertTrue(err.startswith('strap version'))
+		out, _ = call_strap('--version')
+		self.assertTrue(out.startswith('strap version'))
 
 	def test_help(self):
-		self.assertTrue(call_strap('-h')[0].startswith('usage: strap'))
+		self.assertTrue(call_strap('-h')[0].startswith('strap'))
 		for e in ['init', 'run', 'cache', 'list']:
-			self.assertTrue(call_strap('{} -h'.format(e))[0].startswith('usage: {}'.format(e)))
+			self.assertTrue(call_strap('{} -h'.format(e))[0].startswith('strap {}'.format(e)))
 
 	@patch('strap.strap.run')
 	@patch('strap.strap.Strap._shell')

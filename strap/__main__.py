@@ -1,3 +1,3 @@
 import strap
 
-strap.main()
+strap.start()

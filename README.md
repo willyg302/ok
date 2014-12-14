@@ -8,7 +8,44 @@ You can read more about the motivations in [this blog post](http://willyg302.git
 
 ## Install
 
-Clone this repo and put the `strap/` directory somewhere convenient (for this readme, we will assume the user's home directory). It's also immensely helpful to alias `python ~/strap` to something like `strap`.
+strap assumes you have at least [Python 2.7](https://www.python.org/) and [git](http://git-scm.com/) installed. You can check whether you have these dependencies with the following commands:
+
+```bash
+$ python --version
+$ git --version
+```
+
+If those return version strings and not errors, you're good to go!
+
+1. Clone strap using git:
+
+   ```bash
+   $ git clone git@github.com:willyg302/strap.py.git
+   ```
+
+   ...or if you wish, download and unpack the ZIP from [GitHub](https://github.com/willyg302/strap.py).
+
+2. Put the `strap.py/` directory somewhere convenient (for this readme, we will assume your home directory).
+
+3. Run the following commands:
+
+   ```bash
+   $ cd strap.py
+   $ python install.py
+   ```
+
+The following step is optional but highly recommended.
+
+4. Add global aliases to your shell for using strap. How to do so depends on what shell you use, but for [bash](http://www.gnu.org/software/bash/) it is as simple as adding these lines to your `~/.bashrc`:
+
+   ```
+   alias sudo='sudo '
+   alias strap='python ~/strap.py/strap'
+   ```
+
+   The first alias allows `sudo` to work with aliases. This is necessary because depending on what you do with strap, you may need elevated privileges to run a command. The second alias allows you to use strap by simply calling `strap`.
+
+Congratulations, you're now ready to use strap!
 
 ## Usage
 
@@ -18,8 +55,6 @@ strap [-h, --help] [--version] {init,run,cache} ...
 ```
 
 Calling `strap` without any arguments is equivalent to `strap run default`.
-
-> **Note**: It may be necessary to `sudo` to elevate privileges, as strap installs necessary tools globally if they are not present. If you are using strap via an alias, don't forget to add `alias sudo='sudo '` to your shell's profile.
 
 ### init
 
