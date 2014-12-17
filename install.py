@@ -1,22 +1,44 @@
 import os
-import urllib
+
+from ok import utils
 
 deps = {
-	'strap/deps/clip.py': {
+	'ok/deps/clip.py': {
 		'user': 'willyg302',
 		'repo': 'clip.py',
-		'commit': '5d032317646379ffb0d8fec4a11949478707dc5e',
+		'commit': 'master',
 		'filepath': 'clip.py'
 	},
-	'strap/deps/giturl.py': {
+	'ok/deps/giturl.py': {
 		'user': 'willyg302',
 		'repo': 'giturl',
-		'commit': '51d17f1698ce817123174c6a90f2c1f4ec43c9dd',
+		'commit': 'master',
 		'filepath': 'giturl.py'
 	}
 }
 
-GIT_URL = 'https://raw.githubusercontent.com/{user}/{repo}/{commit}/{filepath}'
+COMPLETE_MESSAGE = '''Installation complete!
 
-for dest, source in deps.iteritems():
-	urllib.urlretrieve(GIT_URL.format(**source), dest.replace('/', os.sep))
+For best usage, please add the following aliases to your shell:
+
+  - alias sudo='sudo '
+  - alias ok='python {}/ok'
+
+You can then call "ok" from the command line to use ok.
+'''.format(os.getcwd())
+
+def bootstrap():
+	print('Bootstrapping dependencies...')
+	for dest, source in deps.iteritems():
+		utils.fetch_github_file(source, dest)
+
+def main():
+	bootstrap()
+	# At this point we have enough to run ok normally
+	print('Installing ok...')
+	from ok import ok
+	ok.main('run install')
+	print(COMPLETE_MESSAGE)
+
+if __name__ == '__main__':
+	main()

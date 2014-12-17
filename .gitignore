@@ -1,7 +1,6 @@
 *.py[cod]
-*.gz
 env/
 requirements.txt
-strap/.depcache.json
-strap/deps/*
+modules/
+ok/deps/*
 !__init__.py

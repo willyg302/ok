@@ -1,3 +1,0 @@
-import strap
-
-strap.start()
