@@ -6,6 +6,7 @@ import json
 
 import utils
 from deps import clip
+from deps import antsy
 from deps.giturl import *
 
 
@@ -129,7 +130,7 @@ class ModuleCache:
 			okapi.log('No modules found')
 			return
 		for k in sorted(self._cache):
-			clip.echo('{}{}'.format('' if self._cache[k] else utils.ANSI.decorate('[failed] ', utils.ANSI.COLOR['red']), k))
+			clip.echo('{}{}'.format('' if self._cache[k] else antsy.decorate('(fg/red [failed]) '), k))
 
 	def list_available(self):
 		clip.echo('\n'.join(self._registry))
@@ -163,7 +164,7 @@ class OkAPI(object):
 		self.module_cache.close()
 		if self.notify_on_close:
 			status, color = ('There were errors.', 'red') if err else ('No error!', 'green')
-			self.log('Complete! {}'.format(utils.ANSI.decorate(status, utils.ANSI.COLOR[color])))
+			self.log(antsy.decorate('Complete! (fg/{} {})'.format(color, status)))
 
 	def shell(self, command, force_global=False):
 		'''Wrapper around shell() that can invoke relative to a virtual environment'''
@@ -190,7 +191,7 @@ class OkAPI(object):
 				self.run(t)
 		else:
 			if hasattr(task, '__call__'):
-				self.log('Running task {}'.format(utils.ANSI.decorate(task.__doc__ or task.__name__, [utils.ANSI.BOLD, utils.ANSI.COLOR['cyan']])))
+				self.log(antsy.decorate('Running task (b,fg/cyan {})'.format(task.__doc__ or task.__name__)))
 				task()
 			else:
 				# First check whether we can offload task to a module
@@ -203,7 +204,7 @@ class OkAPI(object):
 
 	def log(self, message, important=True):
 		if important or not self.silent:
-			clip.echo('{} {}'.format(utils.ANSI.decorate('[ok]', [utils.ANSI.BOLD, utils.ANSI.COLOR['green']]), message))
+			clip.echo(antsy.decorate('(b,fg/green [ok]) {}'.format(message)))
 
 
 okapi = OkAPI()

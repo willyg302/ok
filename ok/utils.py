@@ -86,24 +86,3 @@ GITHUB_FILE_URL = 'https://raw.githubusercontent.com/{user}/{repo}/{commit}/{fil
 # @TODO: Handle possible errors. ok should short-circuit if anything goes wrong here
 def fetch_github_file(source, dest):
 	urllib.urlretrieve(GITHUB_FILE_URL.format(**source), normalize_path(dest))
-
-
-########################################
-# ANSI ESCAPE CODES
-########################################
-
-class ANSI(object):
-	ESCAPE = '\033[{}m'
-	END = ESCAPE.format('0')
-
-	BOLD = '1'
-	ITALIC = '3'
-	UNDERLINE = '4'
-
-	COLOR = {e: str(30 + i) for i, e in enumerate(['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'])}
-
-	@classmethod
-	def decorate(cls, s, styles):
-		if isinstance(styles, (list, tuple)):
-			styles = ';'.join(styles)
-		return '{}{}{}'.format(cls.ESCAPE.format(styles), s, cls.END)

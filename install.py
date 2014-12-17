@@ -14,6 +14,12 @@ deps = {
 		'repo': 'giturl',
 		'commit': 'master',
 		'filepath': 'giturl.py'
+	},
+	'ok/deps/antsy.py': {
+		'user': 'willyg302',
+		'repo': 'antsy',
+		'commit': 'master',
+		'filepath': 'antsy.py'
 	}
 }
 
