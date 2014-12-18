@@ -1,4 +1,6 @@
-![ok](https://raw.github.com/willyg302/ok/master/ok-logo.png "Everything is going to be ok")
+<p align="center">
+	<img width="379" height="250" src="https://raw.github.com/willyg302/ok/master/ok-logo.png" alt="ok" title="Everything is going to be ok">
+</p>
 
 -----
 
