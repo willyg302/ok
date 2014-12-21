@@ -4,6 +4,8 @@
 
 -----
 
+[![license](http://img.shields.io/badge/license-MIT-red.svg?style=flat-square)](https://raw.githubusercontent.com/willyg302/ok/master/LICENSE)
+
 ok is Make for stupid people: a simple tool for cloning, copying, and initializing projects, because bootstrapping shouldn't be so gosh-durn hard. Inspired by [init-skeleton](https://github.com/paulmillr/init-skeleton).
 
 ## Install
