@@ -1,5 +1,3 @@
-import unittest
-
 def test():
 	with ok.virtualenv('env'):
 		ok.run('python -m unittest discover tests')
