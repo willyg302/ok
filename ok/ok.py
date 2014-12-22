@@ -125,18 +125,32 @@ class ModuleCache:
 		self._cache = {}
 		okapi.log('Module cache successfully cleaned')
 
+	def _print_module(self, module):
+		if module in self._cache:
+			color, mark = ('green', u'\u2713') if self._cache[module] else ('red', u'\u2717')
+			clip.echo(antsy.decorate('(fg/{} {} {})'.format(color, mark.encode('utf8'), module)))
+		else:
+			clip.echo(module)
+
 	def list(self):
 		if not self._cache:
 			okapi.log('No modules found')
 			return
 		for k in sorted(self._cache):
-			clip.echo('{}{}'.format('' if self._cache[k] else antsy.decorate('(fg/red [failed]) '), k))
+			self._print_module(k)
 
 	def list_available(self):
-		clip.echo('\n'.join(self._registry))
+		for module in self._registry:
+			self._print_module(module)
 
 	def sync(self):
 		self._download('registry.json', self._registry_file)
+		okapi.log('Sync complete')
+
+	def update(self, module):
+		self._loaded_modules.pop(module, None)  # First remove it if it's been loaded this run
+		self._cache.pop(module, None)  # Remove it from the cache
+		self.load(module)
 
 
 ########################################
@@ -299,6 +313,11 @@ def modules_list(available):
 @modules.subcommand(name='sync', description='Sync your module list from the online registry')
 def modules_sync():
 	okapi.module_cache.sync()
+
+@modules.subcommand(name='update', description='Update a given module')
+@clip.arg('module', required=True)
+def modules_update(module):
+	okapi.module_cache.update(module)
 
 @ok.subcommand(name='list', description='List the tasks defined in a project\'s {}'.format(utils.CONFIG))
 def list_tasks():
