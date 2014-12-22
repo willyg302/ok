@@ -143,13 +143,15 @@ class ModuleCache:
 		for module in self._registry:
 			self._print_module(module)
 
-	def sync(self):
-		self._download('registry.json', self._registry_file)
-		okapi.log('Sync complete')
-
-	def update(self, module):
+	def remove(self, module):
 		self._loaded_modules.pop(module, None)  # First remove it if it's been loaded this run
 		self._cache.pop(module, None)  # Remove it from the cache
+
+	def sync(self):
+		self._download('registry.json', self._registry_file)
+
+	def update(self, module):
+		self.remove(module)
 		self.load(module)
 
 
@@ -310,14 +312,22 @@ def modules_list(available):
 	else:
 		okapi.module_cache.list()
 
+@modules.subcommand(name='remove', description='Remove a given module from the local cache')
+@clip.arg('module', required=True)
+def modules_remove(module):
+	okapi.module_cache.remove(module)
+	okapi.log('Module "{}" successfully removed'.format(module))
+
 @modules.subcommand(name='sync', description='Sync your module list from the online registry')
 def modules_sync():
 	okapi.module_cache.sync()
+	okapi.log('Sync complete')
 
 @modules.subcommand(name='update', description='Update a given module')
 @clip.arg('module', required=True)
 def modules_update(module):
 	okapi.module_cache.update(module)
+	okapi.log('Module "{}" has been updated'.format(module))
 
 @ok.subcommand(name='list', description='List the tasks defined in a project\'s {}'.format(utils.CONFIG))
 def list_tasks():
