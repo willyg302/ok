@@ -132,6 +132,13 @@ class ModuleCache:
 		else:
 			clip.echo(module)
 
+	def info(self, module):
+		if module not in self._cache:
+			okapi.confirm('The module "{}" must be downloaded first. Continue?'.format(module))
+		m = self.load(module)
+		self._print_module(module)
+		clip.echo(m.__doc__ or 'No info provided')
+
 	def list(self):
 		if not self._cache:
 			okapi.log('No modules found')
@@ -198,6 +205,9 @@ class OkAPI(object):
 		with utils.directory(path):
 			yield
 
+	def confirm(self, message):
+		clip.confirm(message, abort=True)
+
 	def ping(self, command):
 		return utils.shell(command, silent=True) == 0
 
@@ -233,7 +243,7 @@ okapi = OkAPI()
 def verify_write_directory(dir):
 	'''Deletes [dir] if it exists and the user approves'''
 	if os.path.isdir(dir):
-		clip.confirm('The directory "{}" already exists! Overwrite?'.format(dir), abort=True)
+		okapi.confirm('The directory "{}" already exists! Overwrite?'.format(dir))
 		shutil.rmtree(dir)
 
 def clone(source, dest):
@@ -301,8 +311,13 @@ def modules():
 
 @modules.subcommand(name='clean', description='[DANGER] Nuke your local cache of modules')
 def modules_clean():
-	clip.confirm('Are you sure you want to clean the module cache?', abort=True)
+	okapi.confirm('Are you sure you want to clean the module cache?')
 	okapi.module_cache.clean()
+
+@modules.subcommand(name='info', description='Print information on the given module')
+@clip.arg('module', required=True)
+def modules_info(module):
+	okapi.module_cache.info(module)
 
 @modules.subcommand(name='list')
 @clip.flag('-a', '--available', help='List all available modules in the registry')
