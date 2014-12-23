@@ -137,7 +137,7 @@ class ModuleCache:
 			okapi.confirm('The module "{}" must be downloaded first. Continue?'.format(module))
 		m = self.load(module)
 		self._print_module(module)
-		clip.echo(m.__doc__ or 'No info provided')
+		clip.echo(antsy.decorate(m.__doc__ or 'No info provided'))
 
 	def list(self):
 		if not self._cache:
