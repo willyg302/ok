@@ -88,6 +88,10 @@ class ModuleCache:
 	def exists(self, module_name):
 		return module_name in self._registry
 
+	def check_exists(self, module_name):
+		if not self.exists(module_name):
+			clip.exit('Module "{}" does not exist!'.format(module_name), err=True)
+
 	def load(self, module_name):
 		# If it has been loaded already, just return it!
 		if module_name in self._loaded_modules:
@@ -133,6 +137,7 @@ class ModuleCache:
 			clip.echo(module)
 
 	def info(self, module):
+		self.check_exists(module)
 		if module not in self._cache:
 			okapi.confirm('The module "{}" must be downloaded first. Continue?'.format(module))
 		m = self.load(module)
@@ -151,6 +156,7 @@ class ModuleCache:
 			self._print_module(module)
 
 	def remove(self, module):
+		self.check_exists(module)
 		self._loaded_modules.pop(module, None)  # First remove it if it's been loaded this run
 		self._cache.pop(module, None)  # Remove it from the cache
 
