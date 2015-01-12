@@ -276,7 +276,7 @@ app = clip.App()
 def print_version(value):
 	clip.exit('ok version {}'.format(__version__))
 
-@app.main()
+@app.main(default='run')
 @clip.flag('--version', callback=print_version, hidden=True, help='Print the version')
 @clip.flag('-s', '--silent', inherit_only=True)
 def ok():
@@ -311,7 +311,7 @@ def run(tasks, dir=None, silent=False):
 			okapi.run(getattr(config, task))
 	okapi.log('All tasks complete!')
 
-@ok.subcommand(description='Manage ok modules')
+@ok.subcommand(default='-h', description='Manage ok modules')
 def modules():
 	okapi.notify_on_close = False
 
@@ -364,10 +364,10 @@ def list_tasks():
 # MAIN METHOD
 ########################################
 
-def main(args=sys.argv[1:]):
+def main(args=None):
 	err = None
 	try:
-		app.run(args or ['run'])
+		app.run(args)
 	except clip.ClipExit:
 		# Parser-level exception, such as help/version or unrecognized argument
 		okapi.notify_on_close = False
