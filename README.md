@@ -46,4 +46,4 @@ Call `ok run test` while in the root directory of this repo. Yes, ok uses itself
 - [x] Code rewrite to be completely bootstrapping
 - [x] Split modules into separate repository, remove Python-centric code
 - [ ] Set up documentation
-- [ ] Support Python 3.4
+- [x] Support Python 3.4

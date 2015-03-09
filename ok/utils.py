@@ -1,7 +1,7 @@
 import os
+import sys
 import contextlib
 import imp
-import urllib
 
 from subprocess import call, STDOUT
 
@@ -11,6 +11,21 @@ CONFIG = 'okfile'
 
 class OkException(Exception):
 	pass
+
+
+########################################
+# COMPATIBILITY
+########################################
+
+PY2 = sys.version_info[0] == 2
+
+if PY2:
+	import urllib
+else:
+	import urllib.request as urllib
+
+def iteritems(d):
+	return d.iteritems() if PY2 else d.items()
 
 
 ########################################

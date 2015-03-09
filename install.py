@@ -35,7 +35,7 @@ You can then call "ok" from the command line to use ok.
 
 def bootstrap():
 	print('Bootstrapping dependencies...')
-	for dest, source in deps.iteritems():
+	for dest, source in utils.iteritems(deps):
 		utils.fetch_github_file(source, dest)
 
 def main():

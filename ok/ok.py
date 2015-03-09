@@ -355,7 +355,7 @@ def list_tasks():
 	okapi.notify_on_close = False
 	from inspect import getmembers, isfunction
 	d = {e[0]: e[1] for e in getmembers(utils.load_config(), isfunction) if not e[0].startswith('_')}
-	col_width = max(len(k) for k, v in d.iteritems()) + 2
+	col_width = max(len(k) for k, v in utils.iteritems(d)) + 2
 	for k in sorted(d):
 		clip.echo('{}{}'.format(k.ljust(col_width), d[k].__doc__ or ''))
 
